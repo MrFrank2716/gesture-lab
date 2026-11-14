@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>html{padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Gesture Lab</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow phone-first column. Status bar, tab strip, one panel at a time,
+   and a drag pad under the panel when no motion sensor is available.
+   Single dark look on purpose: it stands in for a dark ride and is used in dim rooms. */
+:root{
+  color-scheme:dark;
+  --ink:#11121c; --panel:#1b1d2c; --raised:#252840; --line:#34385a;
+  --text:#ece7dc; --dim:#a2a3b8;
+  --slide:#f2a93b; --chop:#4fd1b5; --hold:#8ea2ff; --miss:#ef5d74;
+  --display:'Chakra Petch','Trebuchet MS',sans-serif;
+  --body:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{background:var(--ink);color:var(--text);font-family:var(--body);font-size:15px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 28px}
+.wrap{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+h1{font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:.02em;margin:0}
+h2{font-family:var(--display);font-weight:500;font-size:16px;margin:0;text-wrap:balance}
+p{margin:0}
+.dim{color:var(--dim)}
+.small{font-size:13px}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.pill{font-family:var(--mono);font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+.pill[data-state="live"]{color:var(--chop);border-color:var(--chop)}
+.pill[data-state="sim"]{color:var(--hold);border-color:var(--hold)}
+.tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:var(--panel);padding:4px;border-radius:10px}
+.tabs button{font-family:var(--display);font-weight:500;font-size:14px;background:none;border:0;color:var(--dim);padding:9px 4px;border-radius:7px;cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--raised);color:var(--text)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--hold);outline-offset:2px}
+.panel{display:flex;flex-direction:column;gap:12px}
+canvas{display:block;width:100%;border-radius:12px;background:#0b0c14}
+#scene{aspect-ratio:4/3;max-width:100%}
+#plot{height:300px}
+.hud{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.hud div{background:var(--panel);border-radius:10px;padding:8px 12px}
+.hud span{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.hud b{font-family:var(--mono);font-weight:500;font-size:20px;font-variant-numeric:tabular-nums}
+.btn{font-family:var(--display);font-weight:700;font-size:16px;border:0;border-radius:10px;padding:13px 18px;cursor:pointer;background:var(--slide);color:#1d1403}
+.btn.ghost{background:var(--raised);color:var(--text);font-weight:500}
+.btn:disabled{opacity:.45;cursor:default}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row>.btn{flex:1 1 auto}
+.card{background:var(--panel);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--dim)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+th{font-weight:500;color:var(--dim);font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+td{font-family:var(--mono);font-variant-numeric:tabular-nums}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--dim)}
+label .lv{display:flex;justify-content:space-between}
+label .lv b{color:var(--text);font-family:var(--mono);font-weight:500}
+input[type=range]{width:100%;accent-color:var(--slide)}
+input[type=text]{background:var(--ink);border:1px solid var(--line);border-radius:8px;color:var(--text);font:inherit;padding:10px 12px;width:100%}
+#pad{touch-action:none;user-select:none;-webkit-user-select:none;height:120px;border:1px dashed var(--hold);border-radius:12px;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--hold);padding:10px;cursor:grab}
+#log{font-family:var(--mono);font-size:12px;color:var(--dim);max-height:150px;overflow:auto;white-space:pre-wrap;margin:0}
+.kv{display:grid;grid-template-columns:1fr auto;gap:4px 12px;font-size:14px}
+.kv span:nth-child(even){font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+.tag-slide{color:var(--slide)} .tag-chop{color:var(--chop)} .tag-none{color:var(--dim)}
+#notice{border-left:3px solid var(--hold);padding:8px 12px;background:var(--panel);border-radius:0 8px 8px 0}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Gesture Lab</h1>
+    <span class="pill" id="status" data-state="off">sensor off</span>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tab-play" aria-selected="true" data-tab="play">Play</button>
+    <button role="tab" id="tab-signals" aria-selected="false" data-tab="signals">Signals</button>
+    <button role="tab" id="tab-record" aria-selected="false" data-tab="record">Record</button>
+    <button role="tab" id="tab-tune" aria-selected="false" data-tab="tune">Tune</button>
+  </div>
+
+  <p id="notice" class="small" hidden></p>
+
+  <div id="pad" hidden>Drag here to fake motion.<br>Sideways for a slide, downward for a chop.</div>
+
+  <section class="panel" id="p-play">
+    <canvas id="scene"></canvas>
+    <div class="hud">
+      <div><span>Score</span><b id="h-score">0</b></div>
+      <div><span>Combo</span><b id="h-combo">0</b></div>
+      <div><span>Time</span><b id="h-time">45</b></div>
+    </div>
+    <div class="row">
+      <button class="btn" id="b-start">Start sensors</button>
+      <button class="btn ghost" id="b-round" disabled>Play a 45 s round</button>
+    </div>
+    <div class="card" id="results" hidden>
+      <h2>Round results</h2>
+      <div class="kv" id="r-kv"></div>
+      <div style="overflow-x:auto"><table id="r-table"></table></div>
+      <p class="small dim">Rows are what the game asked for. Columns are what the detector reported. The round is in the recording, so you can save it from the Record tab.</p>
+    </div>
+    <div class="card">
+      <h2>How to hold it</h2>
+      <p class="small dim">Grip the phone like a handle, any way up. A <b class="tag-slide">slide</b> is a fast sideways sweep, as if cutting across a table top. A <b class="tag-chop">chop</b> is a fast downward strike from the elbow. The detector works out which way is down from gravity, so the grip does not matter. Keep a firm hold and clear space around you.</p>
+    </div>
+  </section>
+
+  <section class="panel" id="p-signals" hidden>
+    <canvas id="plot"></canvas>
+    <div class="legend" id="legend"></div>
+    <div class="row">
+      <button class="btn ghost" id="b-view">Show raw axes</button>
+    </div>
+    <div class="card">
+      <div class="kv">
+        <span class="dim">Sample rate</span><span id="s-rate">0 Hz</span>
+        <span class="dim">Turn rate about vertical</span><span id="s-yaw">0 °/s</span>
+        <span class="dim">Turn rate about horizontal</span><span id="s-tilt">0 °/s</span>
+        <span class="dim">Sideways acceleration</span><span id="s-ah">0.0 m/s²</span>
+        <span class="dim">Vertical acceleration</span><span id="s-av">0.0 m/s²</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="p-record" hidden>
+    <div class="card">
+      <h2>Record a labelled take</h2>
+      <label for="i-label">Label for this take
+        <input type="text" id="i-label" value="mixed" autocomplete="off" autocapitalize="off" spellcheck="false">
+      </label>
+      <div class="row">
+        <button class="btn" id="b-rec" disabled>Record</button>
+        <button class="btn ghost" id="b-save" disabled>Save CSV</button>
+        <button class="btn ghost" id="b-clear" disabled>Clear</button>
+      </div>
+      <div class="kv">
+        <span class="dim">Rows</span><span id="rec-rows">0</span>
+        <span class="dim">Length</span><span id="rec-len">0.0 s</span>
+        <span class="dim">State</span><span id="rec-state">idle</span>
+      </div>
+      <p class="small dim" id="rec-msg">Useful takes: 20 slides, 20 chops, sitting still, walking, a bumpy bus. Each row holds raw accelerometer and gyroscope values, the label, any game prompt and any detected gesture.</p>
+    </div>
+    <div class="card">
+      <h2>Detected gestures</h2>
+      <pre id="log">Nothing yet.</pre>
+    </div>
+  </section>
+
+  <section class="panel" id="p-tune" hidden>
+    <div class="card">
+      <h2>Rule thresholds</h2>
+      <label for="t-start"><span class="lv">Motion starts above <b id="v-start"></b></span>
+        <input type="range" id="t-start" min="40" max="400" step="10"></label>
+      <label for="t-sweep"><span class="lv">Minimum angle swept <b id="v-sweep"></b></span>
+        <input type="range" id="t-sweep" min="10" max="90" step="5"></label>
+      <label for="t-dom"><span class="lv">Share of rotation on one axis <b id="v-dom"></b></span>
+        <input type="range" id="t-dom" min="50" max="95" step="5"></label>
+      <label for="t-acc"><span class="lv">Minimum acceleration peak <b id="v-acc"></b></span>
+        <input type="range" id="t-acc" min="0" max="20" step="1"></label>
+      <label for="t-peak"><span class="lv">Turn rate reached within 150 ms <b id="v-peak"></b></span>
+        <input type="range" id="t-peak" min="120" max="600" step="10"></label>
+      <button class="btn ghost" id="b-reset">Reset to defaults</button>
+    </div>
+    <div class="card">
+      <h2>Last movement the detector looked at</h2>
+      <div class="kv" id="w-kv"><span class="dim">Move the phone to see one.</span><span></span></div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const C = {slide:'#f2a93b', chop:'#4fd1b5', hold:'#8ea2ff', miss:'#ef5d74', text:'#ece7dc', dim:'#a2a3b8', line:'#34385a'};
+const DEFAULTS = {start:120, sweep:30, dom:0.65, acc:4, peak:250};
+const P = Object.assign({}, DEFAULTS);
+try { Object.assign(P, JSON.parse(localStorage.getItem('gl-params') || '{}')); } catch (e) {}
+
+/* ---------- vector helpers ---------- */
+const dot = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+const len = a => Math.hypot(a[0], a[1], a[2]);
+
+/* ---------- rule-based detector ----------
+   Works on gravity-referenced features so grip does not matter:
+   yaw  = turn rate about the vertical axis (deg/s, signed)
+   wh   = turn rate about horizontal axes (deg/s, 3-vector)
+   aH   = sideways linear acceleration magnitude (m/s^2)
+   aV   = vertical linear acceleration (m/s^2, signed)
+   A window opens when total turn rate passes `start`. Inside it the detector integrates
+   rotation. Slide = enough yaw swept, yaw dominant, sideways acceleration peak.
+   Chop = enough horizontal-axis rotation, that axis dominant, vertical acceleration peak.
+   Both also need a fast onset: turn rate must reach `peak` within 150 ms of the window opening,
+   so a slowly spinning ride vehicle (up to about 120 deg/s) cannot pass as a slow slide. */
+class Detector {
+  constructor(p) { this.p = p; this.state = 'idle'; this.quietUntil = 0; this.lastWindow = null; }
+  push(s) {
+    const p = this.p, wm = len(s.w);
+    if (this.state === 'idle') {
+      if (s.t < this.quietUntil || wm <= p.start) return null;
+      this.state = 'active'; this.t0 = s.t; this.last = s.t;
+      this.yawInt = 0; this.tv = [0, 0, 0]; this.pAH = 0; this.pAV = 0; this.pW = 0; this.pFast = 0;
+      this.fired = null; this.below = 0;
+    }
+    const dt = Math.min(0.05, Math.max(0, (s.t - this.last) / 1000)); this.last = s.t;
+    this.yawInt += s.yaw * dt;
+    for (let i = 0; i < 3; i++) this.tv[i] += s.wh[i] * dt;
+    this.pAH = Math.max(this.pAH, s.aH); this.pAV = Math.max(this.pAV, Math.abs(s.aV)); this.pW = Math.max(this.pW, wm);
+    const dur = s.t - this.t0; if (dur <= 150) this.pFast = Math.max(this.pFast, wm);   // fast onset: peak reached soon after motion starts
+    const ys = Math.abs(this.yawInt), ts = len(this.tv), tot = ys + ts || 1e-9;
+    const feat = () => ({t: s.t, dur, yawSweep: this.yawInt, tiltSweep: ts, yawShare: ys / tot, peakAH: this.pAH, peakAV: this.pAV, peakW: this.pW, peakFast: this.pFast});
+    let out = null;
+    if (!this.fired && dur >= 50 && this.pFast >= p.peak) {
+      if (ys >= p.sweep && ys / tot >= p.dom && this.pAH >= p.acc) this.fired = 'slide';
+      else if (ts >= p.sweep && ts / tot >= p.dom && this.pAV >= p.acc) this.fired = 'chop';
+      if (this.fired) out = Object.assign({type: this.fired}, feat());
+    }
+    this.below = wm < p.start * 0.5 ? this.below + dt * 1000 : 0;
+    if (this.below >= 100 || dur > 900) {
+      this.state = 'idle'; this.quietUntil = s.t + 150;
+      this.lastWindow = Object.assign({type: this.fired || 'none'}, feat());
+      if (!this.fired) out = this.lastWindow;
+    }
+    return out;
+  }
+}
+const det = new Detector(P);
+
+/* ---------- sample pipeline ---------- */
+const BUF_MS = 5000;
+const buf = [];           // recent samples for the plot
+let rec = [];             // recorded rows
+let recording = false, recStart = 0;
+let prompt = '';          // current game prompt, written into the recording
+let gHat = [0, 0, 1], gLP = null;
+let rateDt = 16.7, lastT = 0, lastS = null;
+const events = [];
+
+function ingest(t, a, aig, w, hasLinear) {
+  if (!hasLinear) {                       // no linear acceleration from the device: low-pass gravity ourselves
+    gLP = gLP ? gLP.map((v, i) => 0.92 * v + 0.08 * aig[i]) : aig.slice();
+    a = aig.map((v, i) => v - gLP[i]);
+  }
+  const g = [aig[0] - a[0], aig[1] - a[1], aig[2] - a[2]], gl = len(g);
+  if (gl > 1) gHat = g.map(v => v / gl);
+  const yaw = dot(w, gHat), wh = w.map((v, i) => v - yaw * gHat[i]);
+  const aV = dot(a, gHat), aH = len(a.map((v, i) => v - aV * gHat[i]));
+  const s = {t, a, aig, w, yaw, wh, tilt: len(wh), aH, aV, ev: ''};
+  if (lastT) rateDt = 0.95 * rateDt + 0.05 * (t - lastT); lastT = t; lastS = s;
+  const ev = det.push(s);
+  if (ev && ev.type !== 'none') s.ev = ev.type;
+  buf.push(s); while (buf.length && buf[0].t < t - BUF_MS) buf.shift();
+  if (recording && rec.length < 400000) rec.push([t - recStart, a, aig, w, yaw, s.tilt, aH, aV, $('i-label').value.trim(), prompt, s.ev]);
+  if (ev) onDetector(ev);
+}
+
+/* ---------- real sensor ---------- */
+let running = false, gotSensor = false, simOn = false;
+function onMotion(e) {
+  const r = e.rotationRate, ag = e.accelerationIncludingGravity, al = e.acceleration;
+  if (!r || r.alpha == null || !ag || ag.x == null) return;
+  if (!gotSensor) { gotSensor = true; stopSim(); notice(''); setStatus(); }
+  const hasLinear = !!(al && al.x != null);
+  // rotationRate: beta is about x, gamma about y, alpha about z (deg/s)
+  ingest(performance.now(), hasLinear ? [al.x, al.y, al.z] : null, [ag.x, ag.y, ag.z], [r.beta || 0, r.gamma || 0, r.alpha || 0], hasLinear);
+}
+
+/* ---------- simulated input: a drag pad that produces fake IMU samples ---------- */
+let simTimer = 0, pp = null, pv = [0, 0], down = false, prevPos = null;
+function startSim() {
+  if (simOn) return; simOn = true; $('pad').hidden = false; setStatus();
+  let last = performance.now();
+  simTimer = setInterval(() => {
+    const now = performance.now(), dt = Math.max(1, now - last) / 1000; last = now;
+    let v = [0, 0];
+    if (down && pp && prevPos) v = [(pp[0] - prevPos[0]) / dt, (pp[1] - prevPos[1]) / dt];
+    prevPos = pp ? pp.slice() : null;
+    const acc = [(v[0] - pv[0]) / dt * 0.001, (v[1] - pv[1]) / dt * 0.001]; pv = v;
+    const a = [acc[0], 0, acc[1]];
+    ingest(now, a, [a[0], a[1], a[2] + 9.81], [v[1] * 0.5, 0, v[0] * 0.5], true);
+  }, 16);
+}
+function stopSim() { if (!simOn) return; simOn = false; clearInterval(simTimer); $('pad').hidden = true; }
+const pad = $('pad');
+pad.addEventListener('pointerdown', e => { down = true; pp = [e.clientX, e.clientY]; prevPos = pp.slice(); try { pad.setPointerCapture(e.pointerId); } catch (x) {} });
+pad.addEventListener('pointermove', e => { if (down) pp = [e.clientX, e.clientY]; });
+['pointerup', 'pointercancel'].forEach(n => pad.addEventListener(n, () => { down = false; }));
+
+/* ---------- start ---------- */
+function setStatus() {
+  const el = $('status');
+  if (!running) { el.dataset.state = 'off'; el.textContent = 'sensor off'; }
+  else if (gotSensor) { el.dataset.state = 'live'; el.textContent = 'live ' + Math.round(1000 / rateDt) + ' Hz'; }
+  else if (simOn) { el.dataset.state = 'sim'; el.textContent = 'simulated'; }
+  else { el.dataset.state = 'off'; el.textContent = 'looking for sensor'; }
+}
+function notice(msg) { const n = $('notice'); n.textContent = msg; n.hidden = !msg; }
+async function start() {
+  if (running) return;
+  running = true; initAudio(); setStatus();
+  $('b-start').disabled = true; $('b-start').textContent = 'Sensors running';
+  let granted = true;
+  try {
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function')
+      granted = (await DeviceMotionEvent.requestPermission()) === 'granted';
+  } catch (e) { granted = false; }
+  window.addEventListener('devicemotion', onMotion);   // harmless if access was refused: no events arrive
+  try { if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(() => {}); } catch (e) {}
+  ['b-round', 'b-rec'].forEach(id => { $(id).disabled = false; });
+  setTimeout(() => {
+    if (gotSensor) return;
+    startSim();
+    notice(window.claude
+      ? 'This page cannot read motion sensors when it is opened inside Claude. It is running on simulated motion from the drag pad. Open the hosted copy of the same file in your phone browser for real sensor data.'
+      : granted ? 'No motion sensor found on this device, so the drag pad below stands in for one.'
+                : 'Motion access was not allowed, so the drag pad below stands in for the sensor. Reload the page to be asked again.');
+  }, 1200);
+}
+$('b-start').addEventListener('click', start);
+
+/* ---------- feedback: sound and vibration ---------- */
+let ac = null, noiseBuf = null;
+function initAudio() {
+  try {
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    if (ac.state === 'suspended') ac.resume();
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.4, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  } catch (e) { ac = null; }
+}
+function tone(type, f0, f1, dur, vol) {
+  if (!ac) return; const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur);
+}
+function whoosh(f0, f1, dur, vol) {
+  if (!ac) return; const t = ac.currentTime, n = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+  n.buffer = noiseBuf; f.type = 'bandpass'; f.Q.value = 1.2;
+  f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(0.001, t); g.gain.linearRampToValueAtTime(vol, t + dur * 0.3); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  n.connect(f).connect(g).connect(ac.destination); n.start(t); n.stop(t + dur);
+}
+const buzz = pat => { try { if (navigator.vibrate) navigator.vibrate(pat); } catch (e) {} };
+const fb = {
+  slide() { whoosh(500, 3200, 0.28, 0.5); buzz(35); },
+  chop() { tone('sine', 190, 45, 0.18, 0.7); whoosh(1800, 300, 0.09, 0.35); buzz([20, 25, 45]); },
+  hit() { tone('triangle', 660, 1100, 0.16, 0.25); },
+  miss() { tone('square', 120, 80, 0.22, 0.12); buzz(160); },
+  held() { tone('sine', 520, 520, 0.12, 0.15); }
+};
+
+/* ---------- game ---------- */
+const ROUND_MS = 45000;
+const game = {on: false, tEnd: 0, score: 0, combo: 0, cur: null, nextAt: 0, trials: [], stray: 0};
+const fx = [];
+let recBeforeRound = false;
+function startRound() {
+  if (!running || game.on) return;
+  const now = performance.now();
+  Object.assign(game, {on: true, tEnd: now + ROUND_MS, score: 0, combo: 0, cur: null, nextAt: now + 900, trials: [], stray: 0});
+  recBeforeRound = recording; if (!recording) setRecording(true);
+  $('results').hidden = true; $('b-round').disabled = true; hud();
+}
+function spawn(now) {
+  const r = Math.random(), kind = r < 0.4 ? 'slide' : r < 0.8 ? 'chop' : 'hold';
+  game.cur = {kind, t0: now, ttl: kind === 'hold' ? 1800 : 2200, x: 0.25 + Math.random() * 0.5, y: 0.34 + Math.random() * 0.2};
+  prompt = kind;
+}
+function resolve(ok, detected, now) {
+  const c = game.cur; if (!c) return;
+  game.trials.push({prompt: c.kind, detected, ok, rt: now - c.t0});
+  if (ok) {
+    game.combo++; game.score += 100 + game.combo * 10 + (c.kind === 'hold' ? 0 : Math.round(Math.max(0, 1 - (now - c.t0) / c.ttl) * 50));
+    fx.push({kind: c.kind === 'hold' ? 'held' : 'slash', dir: c.kind, x: c.x, y: c.y, t0: now});
+    if (c.kind === 'hold') fb.held(); else fb.hit();
+  } else {
+    game.combo = 0; fx.push({kind: 'miss', x: c.x, y: c.y, t0: now}); fb.miss();
+  }
+  game.cur = null; prompt = ''; game.nextAt = now + 600 + Math.random() * 600; hud();
+}
+function endRound() {
+  game.on = false; game.cur = null; prompt = '';
+  if (!recBeforeRound) setRecording(false);
+  $('b-round').disabled = false; showResults(); hud();
+}
+function hud() {
+  $('h-score').textContent = game.score; $('h-combo').textContent = game.combo;
+  $('h-time').textContent = game.on ? Math.max(0, Math.ceil((game.tEnd - performance.now()) / 1000)) : Math.round(ROUND_MS / 1000);
+}
+function showResults() {
+  const kinds = ['slide', 'chop', 'hold'], cols = ['slide', 'chop', 'none'];
+  const m = {}; kinds.forEach(k => { m[k] = {slide: 0, chop: 0, none: 0}; });
+  game.trials.forEach(t => { m[t.prompt][t.detected]++; });
+  const ok = game.trials.filter(t => t.ok), gest = game.trials.filter(t => t.prompt !== 'hold');
+  const gestOk = gest.filter(t => t.ok), holds = game.trials.filter(t => t.prompt === 'hold');
+  const pct = (a, b) => b ? Math.round(100 * a / b) + '%' : 'n/a';
+  const rt = gestOk.length ? Math.round(gestOk.reduce((s, t) => s + t.rt, 0) / gestOk.length) + ' ms' : 'n/a';
+  $('r-kv').innerHTML = '';
+  [['Score', game.score], ['Targets', game.trials.length],
+   ['Gestures recognised', pct(gestOk.length, gest.length)],
+   ['False triggers while holding still', holds.length ? (holds.length - holds.filter(t => t.ok).length) + ' of ' + holds.length : 'n/a'],
+   ['Gestures between targets', game.stray],
+   ['Mean time from prompt to hit', rt]].forEach(([k, v]) => {
+    const a = document.createElement('span'), b = document.createElement('span'); a.className = 'dim'; a.textContent = k; b.textContent = v; $('r-kv').append(a, b);
+  });
+  let h = '<tr><th>Asked</th>' + cols.map(c => '<th>' + c + '</th>').join('') + '</tr>';
+  kinds.forEach(k => { h += '<tr><td>' + k + '</td>' + cols.map(c => '<td>' + m[k][c] + '</td>').join('') + '</tr>'; });
+  $('r-table').innerHTML = h; $('results').hidden = false; void ok;
+}
+$('b-round').addEventListener('click', startRound);
+
+function onDetector(ev) {
+  const now = performance.now();
+  showWindow(ev);
+  if (ev.type === 'none') return;
+  events.unshift(ev); if (events.length > 40) events.pop(); renderLog();
+  fb[ev.type]();
+  if (game.on && game.cur) {
+    const c = game.cur;
+    if (c.kind === 'hold') resolve(false, ev.type, now); else resolve(ev.type === c.kind, ev.type, now);
+  } else {
+    if (game.on) game.stray++;
+    fx.push({kind: 'slash', dir: ev.type, x: 0.5, y: 0.45, t0: now, free: true});
+  }
+}
+
+/* ---------- scene drawing ---------- */
+const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const motes = Array.from({length: 14}, () => ({x: Math.random(), y: Math.random(), v: 0.004 + Math.random() * 0.012, r: 1 + Math.random() * 2.5}));
+function fit(cv) {
+  const d = Math.min(2, window.devicePixelRatio || 1), w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== Math.round(w * d) || cv.height !== Math.round(h * d)) { cv.width = Math.round(w * d); cv.height = Math.round(h * d); }
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0); return [ctx, w, h];
+}
+function arrow(ctx, x0, y0, x1, y1, head) {
+  const a = Math.atan2(y1 - y0, x1 - x0);
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1);
+  ctx.moveTo(x1, y1); ctx.lineTo(x1 - head * Math.cos(a - 0.5), y1 - head * Math.sin(a - 0.5));
+  ctx.moveTo(x1, y1); ctx.lineTo(x1 - head * Math.cos(a + 0.5), y1 - head * Math.sin(a + 0.5)); ctx.stroke();
+}
+function glyph(ctx, kind, x, y, R) {
+  ctx.lineWidth = Math.max(3, R * 0.09); ctx.lineCap = 'round'; ctx.strokeStyle = C[kind];
+  if (kind === 'slide') { arrow(ctx, x - R * 0.55, y, x + R * 0.55, y, R * 0.28); }
+  else if (kind === 'chop') { arrow(ctx, x, y - R * 0.55, x, y + R * 0.55, R * 0.28); }
+  else { ctx.beginPath(); ctx.moveTo(x - R * 0.2, y - R * 0.4); ctx.lineTo(x - R * 0.2, y + R * 0.4); ctx.moveTo(x + R * 0.2, y - R * 0.4); ctx.lineTo(x + R * 0.2, y + R * 0.4); ctx.stroke(); }
+}
+const LABEL = {slide: 'SLIDE', chop: 'CHOP', hold: 'HOLD STILL'};
+function drawScene(now) {
+  const [ctx, w, h] = fit($('scene'));
+  const bg = ctx.createRadialGradient(w / 2, h * 0.45, 10, w / 2, h * 0.45, w * 0.75);
+  bg.addColorStop(0, '#1e2036'); bg.addColorStop(1, '#090a11'); ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = 'rgba(242,169,59,0.35)';
+  motes.forEach(m => { const y = reduce ? m.y : ((m.y - now * m.v / 1000) % 1 + 1) % 1; ctx.beginPath(); ctx.arc(m.x * w, y * h, m.r, 0, 7); ctx.fill(); });
+  const R = Math.min(w, h) * 0.17;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const c = game.cur;
+  if (c) {
+    const p = Math.min(1, (now - c.t0) / c.ttl), x = c.x * w, y = c.y * h, col = C[c.kind];
+    ctx.globalAlpha = 0.16; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = C.line; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.stroke();
+    ctx.strokeStyle = col; ctx.beginPath(); ctx.arc(x, y, R, -Math.PI / 2, -Math.PI / 2 + (1 - p) * Math.PI * 2); ctx.stroke();
+    glyph(ctx, c.kind, x, y, R);
+    ctx.fillStyle = col; ctx.font = '700 ' + Math.round(R * 0.42) + 'px "Chakra Petch",sans-serif'; ctx.fillText(LABEL[c.kind], x, y + R + R * 0.45);
+  }
+  for (let i = fx.length - 1; i >= 0; i--) {
+    const f = fx[i], p = (now - f.t0) / 450; if (p >= 1) { fx.splice(i, 1); continue; }
+    const x = f.x * w, y = f.y * h; ctx.globalAlpha = 1 - p;
+    if (f.kind === 'slash') {
+      const col = C[f.dir], L = R * 2.2 * Math.min(1, p * 3);
+      ctx.strokeStyle = col; ctx.lineWidth = 6 * (1 - p) + 1; ctx.lineCap = 'round'; ctx.beginPath();
+      if (f.dir === 'slide') { ctx.moveTo(x - L, y); ctx.lineTo(x + L, y); } else { ctx.moveTo(x, y - L); ctx.lineTo(x, y + L); }
+      ctx.stroke();
+      ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, R * (1 + p * 0.8), 0, 7); ctx.stroke();
+      if (f.free) { ctx.fillStyle = col; ctx.font = '700 ' + Math.round(R * 0.5) + 'px "Chakra Petch",sans-serif'; ctx.fillText(LABEL[f.dir], x, y + R * 1.6); }
+    } else if (f.kind === 'held') {
+      ctx.strokeStyle = C.hold; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, R * (1 + p * 0.5), 0, 7); ctx.stroke();
+    } else {
+      const sx = reduce ? 0 : Math.sin(p * 40) * 8 * (1 - p);
+      ctx.strokeStyle = C.miss; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(x + sx, y, R, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x + sx - R * 0.35, y - R * 0.35); ctx.lineTo(x + sx + R * 0.35, y + R * 0.35); ctx.moveTo(x + sx + R * 0.35, y - R * 0.35); ctx.lineTo(x + sx - R * 0.35, y + R * 0.35); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (!c && !fx.length) {
+    ctx.fillStyle = C.dim; ctx.font = '500 ' + Math.round(Math.max(14, w * 0.04)) + 'px "Chakra Petch",sans-serif';
+    ctx.fillText(!running ? 'Start the sensors, then slide or chop' : game.on ? 'Get ready' : 'Free play: slide or chop', w / 2, h * 0.45);
+  }
+}
+
+/* ---------- signal plot ---------- */
+let rawView = false;
+function setLegend() {
+  const items = rawView ? [['x axis', C.slide], ['y axis', C.chop], ['z axis', C.hold]]
+                        : [['about vertical / sideways (slide)', C.slide], ['about horizontal / vertical (chop)', C.chop]];
+  $('legend').innerHTML = items.map(([n, c]) => '<span><i style="background:' + c + '"></i>' + n + '</span>').join('');
+  $('b-view').textContent = rawView ? 'Show gesture features' : 'Show raw axes';
+}
+$('b-view').addEventListener('click', () => { rawView = !rawView; setLegend(); });
+function drawPlot(now) {
+  const [ctx, w, h] = fit($('plot'));
+  ctx.clearRect(0, 0, w, h);
+  const bands = rawView
+    ? [{name: 'turn rate, °/s', min: 200, get: [s => s.w[0], s => s.w[1], s => s.w[2]], col: [C.slide, C.chop, C.hold]},
+       {name: 'acceleration without gravity, m/s²', min: 10, get: [s => s.a[0], s => s.a[1], s => s.a[2]], col: [C.slide, C.chop, C.hold]}]
+    : [{name: 'turn rate, °/s', min: 200, get: [s => s.yaw, s => s.tilt], col: [C.slide, C.chop]},
+       {name: 'acceleration, m/s²', min: 10, get: [s => s.aH, s => s.aV], col: [C.slide, C.chop]}];
+  const bh = h / 2, x = t => (t - (now - BUF_MS)) / BUF_MS * w;
+  ctx.font = '11px "IBM Plex Mono",monospace'; ctx.textBaseline = 'top';
+  bands.forEach((b, bi) => {
+    const y0 = bi * bh, mid = y0 + bh / 2;
+    let mx = b.min; for (const s of buf) for (const g of b.get) mx = Math.max(mx, Math.abs(g(s)));
+    const k = (bh / 2 - 16) / mx;
+    ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
+    if (bi) { ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(w, y0); ctx.stroke(); }
+    b.get.forEach((g, gi) => {
+      ctx.strokeStyle = b.col[gi]; ctx.lineWidth = 1.6; ctx.beginPath();
+      buf.forEach((s, i) => { const px = x(s.t), py = mid - g(s) * k; if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py); });
+      ctx.stroke();
+    });
+    ctx.fillStyle = C.dim; ctx.textAlign = 'left'; ctx.fillText(b.name, 8, y0 + 5);
+    ctx.textAlign = 'right'; ctx.fillText('±' + Math.round(mx), w - 8, y0 + 5);
+  });
+  for (const s of buf) if (s.ev) {
+    const px = x(s.t); ctx.strokeStyle = C[s.ev]; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(px, 18); ctx.lineTo(px, h); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = C[s.ev]; ctx.textAlign = 'center'; ctx.fillText(s.ev, Math.min(w - 20, Math.max(20, px)), h - 14);
+  }
+  if (!buf.length) { ctx.fillStyle = C.dim; ctx.textAlign = 'center'; ctx.fillText('Start the sensors on the Play tab to see signals', w / 2, h / 2 - 6); }
+}
+
+/* ---------- recording and CSV ---------- */
+function setRecording(on) {
+  if (on === recording) return;
+  recording = on;
+  if (on && !rec.length) recStart = performance.now();
+  $('b-rec').textContent = on ? 'Stop' : 'Record'; recUi();
+}
+function recUi() {
+  $('rec-rows').textContent = rec.length;
+  $('rec-len').textContent = (rec.length ? rec[rec.length - 1][0] / 1000 : 0).toFixed(1) + ' s';
+  $('rec-state').textContent = recording ? (game.on ? 'recording the round' : 'recording') : 'idle';
+  $('b-save').disabled = $('b-clear').disabled = !rec.length;
+}
+$('b-rec').addEventListener('click', () => setRecording(!recording));
+$('b-clear').addEventListener('click', () => { rec = []; if (recording) recStart = performance.now(); recUi(); $('rec-msg').textContent = 'Recording cleared.'; });
+const HEADER = 't_ms,acc_x,acc_y,acc_z,accg_x,accg_y,accg_z,rot_x,rot_y,rot_z,yaw_rate,tilt_rate,acc_h,acc_v,label,prompt,event';
+function csv() {
+  const f = v => v.toFixed(4), q = s => /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  const lines = [HEADER];
+  for (const r of rec) lines.push([r[0].toFixed(1), ...r[1].map(f), ...r[2].map(f), ...r[3].map(f), f(r[4]), f(r[5]), f(r[6]), f(r[7]), q(r[8]), r[9], r[10]].join(','));
+  return lines.join('\n') + '\n';
+}
+async function save() {
+  if (!rec.length) return;
+  const d = new Date(), z = n => String(n).padStart(2, '0');
+  const stamp = d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate()) + '-' + z(d.getHours()) + z(d.getMinutes()) + z(d.getSeconds());
+  const label = ($('i-label').value.trim() || 'take').replace(/[^a-z0-9_-]+/gi, '-');
+  const name = 'gesture-lab_' + (gotSensor ? 'imu' : 'sim') + '_' + label + '_' + stamp + '.csv', text = csv();
+  const msg = $('rec-msg');
+  if (window.claude && window.claude.use) {
+    try {
+      const dl = await window.claude.use('downloads');
+      if (!dl) { msg.textContent = 'Saving files is not available in this view.'; return; }
+      await dl.save({filename: name, data: text}); msg.textContent = 'Saved ' + name + '.';
+    } catch (e) { msg.textContent = e && e.code === 'declined' ? 'Save cancelled.' : 'The file could not be saved here.'; }
+    return;
+  }
+  const url = URL.createObjectURL(new Blob([text], {type: 'text/csv'})), a = document.createElement('a');
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000); msg.textContent = 'Saved ' + name + '.';
+}
+$('b-save').addEventListener('click', save);
+
+function renderLog() {
+  $('log').textContent = events.length ? events.map(e =>
+    (e.t / 1000).toFixed(2).padStart(8) + ' s  ' + e.type.padEnd(5) + '  fired ' + Math.round(e.dur) + ' ms after motion began'
+  ).join('\n') : 'Nothing yet.';
+}
+function showWindow(ev) {
+  const rows = [['Verdict', ev.type === 'none' ? 'not a gesture' : ev.type],
+    ['Time to decision', Math.round(ev.dur) + ' ms'],
+    ['Angle swept about vertical', Math.abs(ev.yawSweep).toFixed(0) + '°'],
+    ['Angle swept about horizontal', ev.tiltSweep.toFixed(0) + '°'],
+    ['Share on the vertical axis', Math.round(ev.yawShare * 100) + '%'],
+    ['Peak sideways acceleration', ev.peakAH.toFixed(1) + ' m/s²'],
+    ['Peak vertical acceleration', ev.peakAV.toFixed(1) + ' m/s²'],
+    ['Peak turn rate', Math.round(ev.peakW) + ' °/s'],
+    ['Turn rate reached in first 150 ms', Math.round(ev.peakFast) + ' °/s']];
+  const kv = $('w-kv'); kv.innerHTML = '';
+  rows.forEach(([k, v], i) => { const a = document.createElement('span'), b = document.createElement('span'); a.className = 'dim'; a.textContent = k; b.textContent = v; if (!i) b.className = 'tag-' + ev.type; kv.append(a, b); });
+}
+
+/* ---------- tuning ---------- */
+const TUNE = [['start', 't-start', 'v-start', v => v + ' °/s', 1], ['sweep', 't-sweep', 'v-sweep', v => v + '°', 1], ['dom', 't-dom', 'v-dom', v => v + '%', 100], ['acc', 't-acc', 'v-acc', v => v + ' m/s²', 1], ['peak', 't-peak', 'v-peak', v => v + ' °/s', 1]];
+function syncTune() { TUNE.forEach(([k, i, o, fmt, mul]) => { const v = Math.round(P[k] * mul); $(i).value = v; $(o).textContent = fmt(v); }); }
+TUNE.forEach(([k, i, o, fmt, mul]) => $(i).addEventListener('input', () => {
+  P[k] = Number($(i).value) / mul; $(o).textContent = fmt($(i).value);
+  try { localStorage.setItem('gl-params', JSON.stringify(P)); } catch (e) {}
+}));
+$('b-reset').addEventListener('click', () => { Object.assign(P, DEFAULTS); syncTune(); try { localStorage.removeItem('gl-params'); } catch (e) {} });
+
+/* ---------- tabs and main loop ---------- */
+let tab = 'play';
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
+  tab = b.dataset.tab;
+  document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', String(x === b)));
+  ['play', 'signals', 'record', 'tune'].forEach(t => { $('p-' + t).hidden = t !== tab; });
+}));
+let slow = 0;
+function frame(now) {
+  if (game.on) {
+    if (now >= game.tEnd) endRound();
+    else if (game.cur && now - game.cur.t0 > game.cur.ttl) resolve(game.cur.kind === 'hold', 'none', now);
+    else if (!game.cur && now >= game.nextAt) spawn(now);
+  }
+  if (tab === 'play') drawScene(now); else if (tab === 'signals') drawPlot(now);
+  if (now - slow > 300) {
+    slow = now; if (game.on) hud(); if (running) setStatus(); recUi();
+    if (lastS) {
+      $('s-rate').textContent = Math.round(1000 / rateDt) + ' Hz';
+      $('s-yaw').textContent = Math.round(lastS.yaw) + ' °/s'; $('s-tilt').textContent = Math.round(lastS.tilt) + ' °/s';
+      $('s-ah').textContent = lastS.aH.toFixed(1) + ' m/s²'; $('s-av').textContent = lastS.aV.toFixed(1) + ' m/s²';
+    }
+  }
+  requestAnimationFrame(frame);
+}
+syncTune(); setLegend(); requestAnimationFrame(frame);
+window.__gl = {det, ingest, game, events, get rec() { return rec; }, csv};
+})();
+</script>
+</body>
+</html>
