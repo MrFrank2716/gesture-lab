@@ -2,91 +2,91 @@
 
 A phone stands in for the handheld. The page reads the phone's accelerometer and gyroscope and gives you:
 
-- a live 3D view of a wand, blaster or ninja blade that follows the phone's orientation
-- a phone link, so the 3D view and the tools sit on a laptop screen while the phone is in your hand
-- guided capture of labelled gesture clips, saved as a dataset for training a model
-- the rule-based slide and chop detector, with a target game, a live signal plot and threshold sliders
+- **Prop:** a live 3D wand, blaster, katana or shuriken that follows the phone, with a motion trail.
+- **Collect:** labelled gesture clips for training a machine-learning model later, plus a quick in-browser model to preview what the clips can do.
+- **Game:** a 45 second target game driven by a rule-based slide and chop detector.
+- **Signals:** a live plot and a continuous recording.
+- **Tune:** thresholds for the rule-based detector.
 
 ## Files
 
 - `index.html`: the whole app in one file. Host this.
 - `gesture-lab.html`: the same page without the outer HTML shell (the source; `sh build.sh` rebuilds `index.html` from it).
-- `train.py`: trains a first classifier from dataset files and compares it with the rules.
-- `sample-dataset.csv`: 36 clips made with the drag-pad simulator, so `train.py` can be tried straight away. Not real motion.
-- `analyse.py`: plots a continuous recording and re-runs the rule detector offline with any thresholds.
-- `sample-recording.csv`: a short synthetic continuous recording for `analyse.py`.
+- `train.py`: trains and tests a classifier on clips saved from the Collect tab.
+- `analyse.py`: plots a continuous recording and re-runs the rule-based detector offline.
+- `sample-clips.json`, `sample-recording.csv`: short synthetic files so both scripts can be tried straight away. They are not real gestures.
 
-## Running it
+## Running it on a phone
 
 Browsers only give motion data to pages served over HTTPS, so opening the file directly will
-not work. Put `index.html` on any HTTPS host, for example GitHub Pages.
-
-**Phone on its own.** Open the link on the phone and tap "Start sensors". iPhone asks for
-motion permission at that tap.
-
-**Phone as the sensor, laptop as the screen (recommended).** You cannot watch a phone you are
-swinging, so:
-
-1. Open the page on the laptop and press "Link a phone". It shows a five character code and a QR code.
-2. Scan the QR code with the phone (or open the page, tap "This phone is the sensor" and type the code), then tap "Start sending".
-3. Point the top of the phone at the laptop screen and press "Recentre" (or the R key).
-
-The laptop now runs everything from the phone's motion: the 3D view, capture, the game, the plot.
-On Android the phone buzzes when a gesture is recognised and on each capture cue.
-
-The link uses [PeerJS](https://peerjs.com) (WebRTC). The two browsers find each other through
-PeerJS's free public pairing server, then motion samples go directly between them. Only the
-code and connection details pass through that server. To avoid it, run your own PeerServer and
-set `window.GL_PEER = {host, port, path, secure}` before the page script.
-
-**No sensor** (a laptop on its own, or the copy inside Claude): a drag pad appears and fakes
-the motion. You can also drag the 3D view.
+not work. Put `index.html` on any HTTPS host, for example GitHub Pages, then open the link on
+the phone and tap "Start sensors". iPhone asks for motion permission at that tap. Without a
+sensor (a laptop, or the copy inside Claude) a drag pad appears and fakes the motion.
 
 Vibration works on Android only; iPhone browsers do not expose it. Sound works on both.
 
-## The 3D view
+## Watching on a laptop while you swing the phone
 
-The item is drawn with its grip at your hand and its tip along the top edge of the phone.
-Orientation comes from integrating the gyroscope, corrected by gravity so tilt cannot drift.
-There is no compass in the loop (the planned IMU has none either), so heading drifts slowly;
-"Recentre" resets it. The view shows orientation only. Position cannot be tracked from an IMU alone.
+You cannot watch a phone you are swinging, so the phone can send its motion to another screen:
 
-If the model is upside down, tick "Flip gravity" on the Tune tab (or on the phone's sending
-screen). iPhones report acceleration with the opposite sign to Android and the page corrects
-for that automatically, but this has not been checked on real phones yet.
+1. Open the page on the laptop and press "Link a phone". It shows a five character code and a QR code.
+2. Scan the QR code with the phone (or open the page, tap "This phone is the sensor" and type the code), then tap "Start sending".
+3. Point the top of the phone at the laptop screen and tap Recentre on the laptop.
 
-## Collecting a training set
+The laptop then runs everything from the phone's motion: the prop, Collect, the game and the plot.
+Clips recorded this way are marked `phone-link`. On Android the phone buzzes when a gesture is recognised.
 
-On the Collect tab pick a gesture (or add your own), set a participant code and press Capture.
-For each repeat you hear a low tick, then a higher GO beep: make the gesture on the beep.
-Every repeat becomes one 1.5 s clip that starts 0.25 s before the beep. "Save dataset CSV"
-writes all clips to one file with one row per sample:
+The link uses [PeerJS](https://peerjs.com) (WebRTC). The two browsers find each other through
+PeerJS's free public pairing server, then motion samples go directly between them. Only the code
+and connection details pass through that server. To avoid it, run your own PeerServer and set
+`window.GL_PEER = {host, port, path, secure}` before the page script. Both devices need internet
+access, and some guest or campus Wi-Fi networks block direct connections between devices.
 
-    clip_id, label, participant, session, item, source, rep, t_ms,
-    acc_x/y/z      acceleration without gravity, m/s^2, device axes
-    accg_x/y/z     acceleration with gravity, m/s^2
-    rot_x/y/z      turn rate, deg/s
-    yaw_rate, tilt_rate, acc_h, acc_v    the grip-independent features the rules use
-    rule_event     what the rule detector fired on that sample, if anything
+## The 3D prop
 
-Clips live in the page until saved, so save before closing the tab. Rules of thumb for a first
-model: 50 or more clips per gesture, several people, and plenty of "still" and "other" clips
-so it learns what is not a gesture. Use codes, not names, for participants.
+Hold the phone like the prop, top edge pointing away from you, and tap Recentre. Two tracking
+modes:
 
-## Training a first model
+- **Phone's own fusion** uses the orientation the phone already computes.
+- **6-axis filter** integrates the gyroscope and corrects tilt from the accelerometer, which is
+  what a handheld with a 6-axis IMU and no magnetometer would do. Its heading drifts slowly.
+  Comparing the two shows how much a docking recalibration would need to correct.
 
-    pip install numpy pandas scikit-learn joblib
-    python train.py sample-dataset.csv
-    python train.py p01.csv p02.csv p03.csv --depth 4 --model gestures.joblib
+If the prop rolls over or hangs upside down in the filter mode, flip the accelerometer sign on
+the Tune tab. Phones disagree about that sign.
 
-It turns each clip into summary features, then reports the rule detector, a small readable
-decision tree and a random forest side by side. With three or more participants the test is
-leave one person out, which is the honest number for a ride where every guest is new.
+## Collecting a dataset
 
-## How the detector works
+1. On the Collect tab enter a participant code (not a name), hand and posture.
+2. Pick a gesture, tap "Start capturing", and repeat the gesture with a half-second pause between
+   repetitions. Each movement is cut out automatically and saved as one clip. "Discard last"
+   removes a bad repetition.
+3. Pick "background" to save a clip every 1.5 s of anything that is not a gesture: sitting,
+   walking, fidgeting, a bus or train ride. A model needs plenty of these to avoid false triggers.
+4. "Save JSON" for Python, "Save CSV" for MATLAB. Clips also stay in the browser until deleted.
 
-Each sample is turned into grip-independent features using the gravity direction:
-turn rate about vertical, turn rate about horizontal axes, sideways acceleration and vertical
+Aim for at least 20 clips per gesture per person, several people of different ages and both
+hands, and as much background as gestures.
+
+Each clip holds raw samples `[t_ms, acc_x, acc_y, acc_z, accg_x, accg_y, accg_z, rot_x, rot_y, rot_z]`
+(acceleration without gravity and with gravity in m/s^2, turn rate in deg/s about the device axes)
+plus label, participant, hand, posture, prop and whether it came from a real sensor (`imu`) or
+the drag pad (`sim`).
+
+## Training a model
+
+    pip install numpy scikit-learn matplotlib joblib
+    python train.py sample-clips.json
+    python train.py p01.json p02.json --plot confusion.png --save model.joblib
+
+It builds 61 simple features per clip, trains a random forest, and tests it by leaving one whole
+participant out at a time when there are two or more participants. That is the honest number for
+a ride, where every guest is new to the model.
+
+## The rule-based detector
+
+Each sample is turned into grip-independent features using the gravity direction: turn rate
+about vertical, turn rate about horizontal axes, sideways acceleration and vertical
 acceleration. A window opens when total turn rate passes a start threshold. A slide is enough
 angle swept about vertical, with that axis dominant and a sideways acceleration peak. A chop is
 the same about a horizontal axis with a vertical acceleration peak. It fires as soon as the
@@ -98,11 +98,8 @@ steady spin could pass as a slow slide.
 
 Defaults: start 120 deg/s, sweep 30 deg, dominance 65%, acceleration 4 m/s^2, fast-onset peak 250 deg/s.
 
-## Analysing a continuous recording
-
     pip install numpy pandas matplotlib
     python analyse.py sample-recording.csv
     python analyse.py my-take.csv --sweep 40 --dom 0.7
 
-It prints sample rate, detections, time to decision, and a confusion table against the game
-prompts, then plots the signals. In MATLAB, `readtable('my-take.csv')` loads the same file.
+In MATLAB, `readtable('my-take.csv')` loads the same files.
