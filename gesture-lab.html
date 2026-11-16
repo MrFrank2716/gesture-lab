@@ -2,8 +2,9 @@
 <title>Gesture Lab</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-/* Layout: one narrow phone-first column. Status bar, tab strip, one panel at a time,
-   and a drag pad under the panel when no motion sensor is available.
+/* Layout: phone-first single column: 3D viewport and its controls (the stage), then a tab
+   strip with one panel at a time. From 920px wide the stage sits in a sticky left column
+   so the viewport stays in view while collecting data or tuning.
    Single dark look on purpose: it stands in for a dark ride and is used in dim rooms. */
 :root{
   color-scheme:dark;
@@ -15,9 +16,35 @@
   --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{background:var(--ink);color:var(--text);font-family:var(--body);font-size:15px;line-height:1.45;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 28px}
 .wrap{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.stage,.side{display:flex;flex-direction:column;gap:12px;min-width:0}
+@media (min-width:920px){
+  #lab{max-width:1180px;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);align-items:start;column-gap:20px}
+  #lab>header{grid-column:1/-1}
+  .stage{position:sticky;top:14px}
+}
+#view-wrap{position:relative;aspect-ratio:4/3;border-radius:12px;overflow:hidden;background:#0b0c14}
+#view3d,#view3d canvas{position:absolute;inset:0;width:100%;height:100%;border-radius:0}
+#view-wrap.sim{touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
+#view-flash{position:absolute;left:0;right:0;top:12px;text-align:center;font-family:var(--display);font-weight:700;font-size:clamp(22px,6vw,40px);letter-spacing:.06em;opacity:0;transition:opacity .5s;pointer-events:none}
+#view-flash.on{opacity:1;transition:none}
+#view-msg{position:absolute;left:12px;right:12px;bottom:10px;text-align:center;font-size:13px;color:var(--dim);pointer-events:none}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;background:var(--panel);padding:4px;border-radius:10px}
+.seg button,.chips button{font-family:var(--display);font-weight:500;font-size:14px;background:none;border:0;color:var(--dim);padding:9px 4px;border-radius:7px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--raised);color:var(--text)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{border:1px solid var(--line);padding:7px 14px;border-radius:999px}
+.chips button[aria-pressed="true"]{background:var(--slide);border-color:var(--slide);color:#1d1403;font-weight:700}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#qr{background:#fff;border-radius:8px;padding:6px;width:168px;height:168px;flex:none}
+#qr svg{display:block;width:100%;height:100%}
+#link-code,#cue{font-family:var(--display);font-weight:700;letter-spacing:.14em;font-size:34px;line-height:1.1}
+#cue{letter-spacing:.04em;text-align:center;padding:10px 0;min-height:58px}
+.linkbtn{background:none;border:0;color:var(--hold);font:inherit;font-size:13px;text-decoration:underline;cursor:pointer;padding:4px 0;text-align:left}
+label.check{flex-direction:row;align-items:center;gap:8px}
 header{display:flex;align-items:center;justify-content:space-between;gap:12px}
 h1{font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:.02em;margin:0}
 h2{font-family:var(--display);font-weight:500;font-size:16px;margin:0;text-wrap:balance}
@@ -28,6 +55,7 @@ p{margin:0}
 .pill{font-family:var(--mono);font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);color:var(--dim);white-space:nowrap}
 .pill[data-state="live"]{color:var(--chop);border-color:var(--chop)}
 .pill[data-state="sim"]{color:var(--hold);border-color:var(--hold)}
+.pill[data-state="link"]{color:var(--slide);border-color:var(--slide)}
 .tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:var(--panel);padding:4px;border-radius:10px}
 .tabs button{font-family:var(--display);font-weight:500;font-size:14px;background:none;border:0;color:var(--dim);padding:9px 4px;border-radius:7px;cursor:pointer}
 .tabs button[aria-selected="true"]{background:var(--raised);color:var(--text)}
@@ -66,24 +94,104 @@ input[type=text]{background:var(--ink);border:1px solid var(--line);border-radiu
 #notice{border-left:3px solid var(--hold);padding:8px 12px;background:var(--panel);border-radius:0 8px 8px 0}
 </style>
 
-<div class="wrap">
+<div class="wrap" id="lab">
   <header>
     <h1>Gesture Lab</h1>
     <span class="pill" id="status" data-state="off">sensor off</span>
   </header>
 
+  <div class="stage">
+    <div id="view-wrap">
+      <div id="view3d"></div>
+      <div id="view-flash"></div>
+      <div id="view-msg">Start the sensors or link a phone to move it.</div>
+    </div>
+    <div class="seg" id="items" role="group" aria-label="Item shown">
+      <button data-item="wand" aria-pressed="true">Wand</button>
+      <button data-item="blaster" aria-pressed="false">Blaster</button>
+      <button data-item="blade" aria-pressed="false">Ninja blade</button>
+    </div>
+    <div class="row">
+      <button class="btn" id="b-start">Start sensors</button>
+      <button class="btn ghost" id="b-centre">Recentre</button>
+      <button class="btn ghost" id="b-link">Link a phone</button>
+    </div>
+    <div class="card" id="link-card" hidden>
+      <h2>Use a phone as the sensor</h2>
+      <div class="row" style="align-items:flex-start;gap:14px">
+        <div id="qr" hidden></div>
+        <div style="flex:1 1 180px;display:flex;flex-direction:column;gap:6px">
+          <span class="small dim">Link code</span>
+          <span id="link-code">…</span>
+          <p class="small dim" id="link-msg">Contacting the pairing service.</p>
+        </div>
+      </div>
+    </div>
+    <p id="notice" class="small" hidden></p>
+    <div id="pad" hidden>Drag here or on the 3D view to fake motion.<br>Sideways for a slide, downward for a chop.</div>
+    <button class="linkbtn" id="b-send">This phone is the sensor: send its motion to another screen</button>
+  </div>
+
+  <div class="side">
   <div class="tabs" role="tablist">
-    <button role="tab" id="tab-play" aria-selected="true" data-tab="play">Play</button>
+    <button role="tab" id="tab-collect" aria-selected="true" data-tab="collect">Collect</button>
+    <button role="tab" id="tab-play" aria-selected="false" data-tab="play">Play</button>
     <button role="tab" id="tab-signals" aria-selected="false" data-tab="signals">Signals</button>
-    <button role="tab" id="tab-record" aria-selected="false" data-tab="record">Record</button>
     <button role="tab" id="tab-tune" aria-selected="false" data-tab="tune">Tune</button>
   </div>
 
-  <p id="notice" class="small" hidden></p>
+  <section class="panel" id="p-collect">
+    <div class="card">
+      <h2>Guided capture for a training set</h2>
+      <p class="small dim">Pick a gesture, press capture, and repeat the gesture on each GO beep. Every repeat is saved as its own labelled clip.</p>
+      <div class="chips" id="classes" role="group" aria-label="Gesture to capture"></div>
+      <div class="row">
+        <input type="text" id="i-class" placeholder="New gesture name" autocomplete="off" autocapitalize="off" spellcheck="false" style="flex:1 1 140px" aria-label="New gesture name">
+        <button class="btn ghost" id="b-addclass" style="flex:0 0 auto">Add</button>
+      </div>
+      <div class="two">
+        <label for="i-who">Participant code
+          <input type="text" id="i-who" value="P01" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
+        <label for="i-reps">Repeats
+          <input type="text" id="i-reps" value="10" inputmode="numeric" autocomplete="off"></label>
+      </div>
+      <div id="cue" class="dim" aria-live="polite">&nbsp;</div>
+      <div class="row">
+        <button class="btn" id="b-cap" disabled>Capture</button>
+        <button class="btn ghost" id="b-undo" disabled>Undo last clip</button>
+      </div>
+      <div style="overflow-x:auto"><table id="c-table"></table></div>
+      <div class="row">
+        <button class="btn ghost" id="b-dsave" disabled>Save dataset CSV</button>
+        <button class="btn ghost" id="b-dclear" disabled>Clear clips</button>
+      </div>
+      <p class="small dim" id="cap-msg">Clips are 1.5 s long and start a quarter second before the beep. As a rule of thumb, aim for 50 or more clips per gesture from several people, and include "still" and "other" so a model learns what is not a gesture. Use a code, not a name, for each participant.</p>
+    </div>
+    <div class="card">
+      <h2>Continuous take</h2>
+      <p class="small dim">One long recording, for background motion such as walking or a bumpy bus.</p>
+      <label for="i-label">Label for this take
+        <input type="text" id="i-label" value="mixed" autocomplete="off" autocapitalize="off" spellcheck="false">
+      </label>
+      <div class="row">
+        <button class="btn" id="b-rec" disabled>Record</button>
+        <button class="btn ghost" id="b-save" disabled>Save CSV</button>
+        <button class="btn ghost" id="b-clear" disabled>Clear</button>
+      </div>
+      <div class="kv">
+        <span class="dim">Rows</span><span id="rec-rows">0</span>
+        <span class="dim">Length</span><span id="rec-len">0.0 s</span>
+        <span class="dim">State</span><span id="rec-state">idle</span>
+      </div>
+      <p class="small dim" id="rec-msg">Each row holds raw accelerometer and gyroscope values, the label, any game prompt and any detected gesture.</p>
+    </div>
+    <div class="card">
+      <h2>Detected gestures</h2>
+      <pre id="log">Nothing yet.</pre>
+    </div>
+  </section>
 
-  <div id="pad" hidden>Drag here to fake motion.<br>Sideways for a slide, downward for a chop.</div>
-
-  <section class="panel" id="p-play">
+  <section class="panel" id="p-play" hidden>
     <canvas id="scene"></canvas>
     <div class="hud">
       <div><span>Score</span><b id="h-score">0</b></div>
@@ -91,18 +199,17 @@ input[type=text]{background:var(--ink);border:1px solid var(--line);border-radiu
       <div><span>Time</span><b id="h-time">45</b></div>
     </div>
     <div class="row">
-      <button class="btn" id="b-start">Start sensors</button>
       <button class="btn ghost" id="b-round" disabled>Play a 45 s round</button>
     </div>
     <div class="card" id="results" hidden>
       <h2>Round results</h2>
       <div class="kv" id="r-kv"></div>
       <div style="overflow-x:auto"><table id="r-table"></table></div>
-      <p class="small dim">Rows are what the game asked for. Columns are what the detector reported. The round is in the recording, so you can save it from the Record tab.</p>
+      <p class="small dim">Rows are what the game asked for. Columns are what the detector reported. The round is in the continuous take, so you can save it from the Collect tab.</p>
     </div>
     <div class="card">
       <h2>How to hold it</h2>
-      <p class="small dim">Grip the phone like a handle, any way up. A <b class="tag-slide">slide</b> is a fast sideways sweep, as if cutting across a table top. A <b class="tag-chop">chop</b> is a fast downward strike from the elbow. The detector works out which way is down from gravity, so the grip does not matter. Keep a firm hold and clear space around you.</p>
+      <p class="small dim">Grip the phone like a handle with the top pointing away from you. A <b class="tag-slide">slide</b> is a fast sideways sweep, as if cutting across a table top. A <b class="tag-chop">chop</b> is a fast downward strike from the elbow. The detector works out which way is down from gravity, so the grip does not matter. Keep a firm hold and clear space around you.</p>
     </div>
   </section>
 
@@ -123,30 +230,6 @@ input[type=text]{background:var(--ink);border:1px solid var(--line);border-radiu
     </div>
   </section>
 
-  <section class="panel" id="p-record" hidden>
-    <div class="card">
-      <h2>Record a labelled take</h2>
-      <label for="i-label">Label for this take
-        <input type="text" id="i-label" value="mixed" autocomplete="off" autocapitalize="off" spellcheck="false">
-      </label>
-      <div class="row">
-        <button class="btn" id="b-rec" disabled>Record</button>
-        <button class="btn ghost" id="b-save" disabled>Save CSV</button>
-        <button class="btn ghost" id="b-clear" disabled>Clear</button>
-      </div>
-      <div class="kv">
-        <span class="dim">Rows</span><span id="rec-rows">0</span>
-        <span class="dim">Length</span><span id="rec-len">0.0 s</span>
-        <span class="dim">State</span><span id="rec-state">idle</span>
-      </div>
-      <p class="small dim" id="rec-msg">Useful takes: 20 slides, 20 chops, sitting still, walking, a bumpy bus. Each row holds raw accelerometer and gyroscope values, the label, any game prompt and any detected gesture.</p>
-    </div>
-    <div class="card">
-      <h2>Detected gestures</h2>
-      <pre id="log">Nothing yet.</pre>
-    </div>
-  </section>
-
   <section class="panel" id="p-tune" hidden>
     <div class="card">
       <h2>Rule thresholds</h2>
@@ -161,6 +244,7 @@ input[type=text]{background:var(--ink);border:1px solid var(--line);border-radiu
       <label for="t-peak"><span class="lv">Turn rate reached within 150 ms <b id="v-peak"></b></span>
         <input type="range" id="t-peak" min="120" max="600" step="10"></label>
       <button class="btn ghost" id="b-reset">Reset to defaults</button>
+      <label class="check" for="t-flip"><input type="checkbox" id="t-flip"> Flip gravity (tick if the 3D model is upside down)</label>
     </div>
     <div class="card">
       <h2>Last movement the detector looked at</h2>
@@ -168,6 +252,28 @@ input[type=text]{background:var(--ink);border:1px solid var(--line);border-radiu
     </div>
   </section>
 
+  </div>
+</div>
+
+<div class="wrap" id="sender" hidden>
+  <header>
+    <h1>Gesture Lab</h1>
+    <span class="pill" id="snd-status" data-state="off">not linked</span>
+  </header>
+  <div class="card">
+    <h2>This phone is the sensor</h2>
+    <p class="small dim">On the other screen press "Link a phone", then enter the code it shows. Hold the phone like a handle with the top pointing away from you.</p>
+    <label for="snd-code">Link code
+      <input type="text" id="snd-code" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
+    <button class="btn" id="snd-go">Start sending</button>
+    <div class="kv">
+      <span class="dim">Sample rate</span><span id="snd-rate">0 Hz</span>
+      <span class="dim">Samples sent</span><span id="snd-n">0</span>
+    </div>
+    <p class="small dim" id="snd-msg">Motion data goes straight to the other screen. Nothing is stored on this phone.</p>
+    <label class="check" for="snd-flip"><input type="checkbox" id="snd-flip"> Flip gravity (tick if the 3D model is upside down)</label>
+    <button class="linkbtn" id="snd-back">Use this phone on its own instead</button>
+  </div>
 </div>
 
 <script>
@@ -182,6 +288,55 @@ try { Object.assign(P, JSON.parse(localStorage.getItem('gl-params') || '{}')); }
 /* ---------- vector helpers ---------- */
 const dot = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
 const len = a => Math.hypot(a[0], a[1], a[2]);
+const cross = (a, b) => [a[1]*b[2] - a[2]*b[1], a[2]*b[0] - a[0]*b[2], a[0]*b[1] - a[1]*b[0]];
+const store = {get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } },
+               set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }};
+
+/* ---------- quaternions [w,x,y,z] and orientation tracking ----------
+   World frame is the 3D view's: Y up, -Z into the screen. Device frame is the phone's:
+   x to the right of the screen, y out of the top edge, z out of the screen.
+   The tracker integrates the gyroscope and leans gently on the measured "up" direction so
+   tilt cannot drift. Heading has no reference without a magnetometer, so it drifts slowly;
+   Recentre sets "wherever the item points now" to "into the screen". */
+const DEG = Math.PI / 180;
+const qmul = (a, b) => [a[0]*b[0] - a[1]*b[1] - a[2]*b[2] - a[3]*b[3], a[0]*b[1] + a[1]*b[0] + a[2]*b[3] - a[3]*b[2],
+                        a[0]*b[2] - a[1]*b[3] + a[2]*b[0] + a[3]*b[1], a[0]*b[3] + a[1]*b[2] - a[2]*b[1] + a[3]*b[0]];
+const qconj = q => [q[0], -q[1], -q[2], -q[3]];
+const qnorm = q => { const n = Math.hypot(q[0], q[1], q[2], q[3]) || 1; return q.map(v => v / n); };
+const qrot = (q, v) => { const r = qmul(qmul(q, [0, v[0], v[1], v[2]]), qconj(q)); return [r[1], r[2], r[3]]; };
+const qFromTo = (u, v) => { const c = cross(u, v), w = 1 + dot(u, v); return w < 1e-6 ? [0, 1, 0, 0] : qnorm([w, c[0], c[1], c[2]]); };
+const qStep = (q, w, dt) => {            // rotate q by body rate w (rad/s) for dt seconds
+  const th = len(w) * dt; if (th < 1e-9) return q;
+  const s = Math.sin(th / 2) / len(w); return qnorm(qmul(q, [Math.cos(th / 2), w[0]*s, w[1]*s, w[2]*s]));
+};
+const UP = [0, 1, 0], REST = qFromTo([0, 0, 1], UP);   // rest pose: phone flat, top edge pointing into the screen
+const fuse = {
+  q: null, yawQ: [1, 0, 0, 0], last: 0,
+  push(t, wDeg, up, gain) {
+    if (!this.q) { if (!up) return; this.q = qFromTo(up, UP); this.last = t; this.centre(); return; }
+    const dt = Math.min(0.05, Math.max(0, (t - this.last) / 1000)); this.last = t;
+    const w = wDeg.map(v => v * DEG);
+    if (up && gain) { const e = cross(up, qrot(qconj(this.q), UP)); for (let i = 0; i < 3; i++) w[i] += gain * e[i]; }
+    this.q = qStep(this.q, w, dt);
+  },
+  centre() {
+    const q = this.q || REST; let f = qrot(q, [0, 1, 0]);
+    if (Math.hypot(f[0], f[2]) < 0.3) f = qrot(q, [0, 0, -1]);     // pointing straight up or down: use the back of the phone
+    const th = Math.atan2(f[0], -f[2]); this.yawQ = [Math.cos(th / 2), 0, Math.sin(th / 2), 0];
+  },
+  get shown() { return qmul(this.yawQ, this.q || REST); },
+  reset() { this.q = null; this.yawQ = [1, 0, 0, 0]; }
+};
+
+/* External libraries are loaded only when needed, so the page still works without them. */
+const CDN = {three: 'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js',
+             peer: 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js',
+             qr: 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js'};
+const loaded = {};
+const load = url => loaded[url] || (loaded[url] = new Promise((ok, bad) => {
+  const s = document.createElement('script'); s.src = url; s.onload = ok;
+  s.onerror = () => { delete loaded[url]; bad(new Error('load failed')); }; document.head.appendChild(s);
+}));
 
 /* ---------- rule-based detector ----------
    Works on gravity-referenced features so grip does not matter:
@@ -245,6 +400,8 @@ function ingest(t, a, aig, w, hasLinear) {
   }
   const g = [aig[0] - a[0], aig[1] - a[1], aig[2] - a[2]], gl = len(g);
   if (gl > 1) gHat = g.map(v => v / gl);
+  // lean on gravity fully when the device separates it for us, otherwise only while the phone is nearly still
+  fuse.push(t, w, gl > 1 ? gHat : null, hasLinear ? 2.5 : Math.abs(len(aig) - 9.81) < 2 ? 1 : 0);
   const yaw = dot(w, gHat), wh = w.map((v, i) => v - yaw * gHat[i]);
   const aV = dot(a, gHat), aH = len(a.map((v, i) => v - aV * gHat[i]));
   const s = {t, a, aig, w, yaw, wh, tilt: len(wh), aH, aV, ev: ''};
@@ -252,25 +409,31 @@ function ingest(t, a, aig, w, hasLinear) {
   const ev = det.push(s);
   if (ev && ev.type !== 'none') s.ev = ev.type;
   buf.push(s); while (buf.length && buf[0].t < t - BUF_MS) buf.shift();
+  capTick(t);
   if (recording && rec.length < 400000) rec.push([t - recStart, a, aig, w, yaw, s.tilt, aH, aV, $('i-label').value.trim(), prompt, s.ev]);
   if (ev) onDetector(ev);
 }
 
 /* ---------- real sensor ---------- */
-let running = false, gotSensor = false, simOn = false;
+let running = false, gotSensor = false, simOn = false, linked = false;
+// iPhones report acceleration with the opposite sign to the web standard. Flip puts "up" the right way round.
+const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (/Mac/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+let flip = store.get('gl-flip', IOS ? '1' : '0') === '1';
+let deliver = null;       // set in sender mode: samples go to the other screen instead of this page
 function onMotion(e) {
   const r = e.rotationRate, ag = e.accelerationIncludingGravity, al = e.acceleration;
   if (!r || r.alpha == null || !ag || ag.x == null) return;
   if (!gotSensor) { gotSensor = true; stopSim(); notice(''); setStatus(); }
-  const hasLinear = !!(al && al.x != null);
+  const hasLinear = !!(al && al.x != null), k = flip ? -1 : 1;
   // rotationRate: beta is about x, gamma about y, alpha about z (deg/s)
-  ingest(performance.now(), hasLinear ? [al.x, al.y, al.z] : null, [ag.x, ag.y, ag.z], [r.beta || 0, r.gamma || 0, r.alpha || 0], hasLinear);
+  const a = hasLinear ? [k * al.x, k * al.y, k * al.z] : null, aig = [k * ag.x, k * ag.y, k * ag.z], w = [r.beta || 0, r.gamma || 0, r.alpha || 0];
+  if (deliver) deliver(performance.now(), a, aig, w, hasLinear); else ingest(performance.now(), a, aig, w, hasLinear);
 }
 
 /* ---------- simulated input: a drag pad that produces fake IMU samples ---------- */
-let simTimer = 0, pp = null, pv = [0, 0], down = false, prevPos = null;
+let simTimer = 0, pp = null, pv = [0, 0], down = false, prevPos = null, simQ = REST;
 function startSim() {
-  if (simOn) return; simOn = true; $('pad').hidden = false; setStatus();
+  if (simOn || linked) return; simOn = true; $('pad').hidden = false; $('view-wrap').classList.add('sim'); simQ = REST; fuse.reset(); setStatus();
   let last = performance.now();
   simTimer = setInterval(() => {
     const now = performance.now(), dt = Math.max(1, now - last) / 1000; last = now;
@@ -278,29 +441,43 @@ function startSim() {
     if (down && pp && prevPos) v = [(pp[0] - prevPos[0]) / dt, (pp[1] - prevPos[1]) / dt];
     prevPos = pp ? pp.slice() : null;
     const acc = [(v[0] - pv[0]) / dt * 0.001, (v[1] - pv[1]) / dt * 0.001]; pv = v;
-    const a = [acc[0], 0, acc[1]];
-    ingest(now, a, [a[0], a[1], a[2] + 9.81], [v[1] * 0.5, 0, v[0] * 0.5], true);
+    const a = [acc[0], 0, acc[1]], up = qrot(qconj(simQ), UP);
+    let w;
+    if (down) w = [-v[1] * 0.5 - up[0] * v[0] * 0.5, -up[1] * v[0] * 0.5, -up[2] * v[0] * 0.5];   // drag right: turn about vertical. Drag down: tip drops
+    else {                                  // let go: ease back to the rest pose, slower than any gesture
+      const e = qmul(qconj(simQ), REST), sg = e[0] < 0 ? -1 : 1, ax = [e[1] * sg, e[2] * sg, e[3] * sg], n = len(ax);
+      const ang = 2 * Math.atan2(n, Math.abs(e[0])) / DEG, sp = Math.min(80, ang * 4);
+      w = n > 1e-6 ? ax.map(c => c / n * sp) : [0, 0, 0];
+    }
+    simQ = qStep(simQ, w.map(c => c * DEG), dt);
+    ingest(now, a, [a[0] + up[0] * 9.81, a[1] + up[1] * 9.81, a[2] + up[2] * 9.81], w, true);
   }, 16);
 }
-function stopSim() { if (!simOn) return; simOn = false; clearInterval(simTimer); $('pad').hidden = true; }
-const pad = $('pad');
-pad.addEventListener('pointerdown', e => { down = true; pp = [e.clientX, e.clientY]; prevPos = pp.slice(); try { pad.setPointerCapture(e.pointerId); } catch (x) {} });
-pad.addEventListener('pointermove', e => { if (down) pp = [e.clientX, e.clientY]; });
-['pointerup', 'pointercancel'].forEach(n => pad.addEventListener(n, () => { down = false; }));
+function stopSim() { if (!simOn) return; simOn = false; down = false; clearInterval(simTimer); $('pad').hidden = true; $('view-wrap').classList.remove('sim'); }
+[$('pad'), $('view-wrap')].forEach(pad => {     // while simulating, the 3D view can be dragged directly as well
+  pad.addEventListener('pointerdown', e => { if (!simOn) return; down = true; pp = [e.clientX, e.clientY]; prevPos = pp.slice(); try { pad.setPointerCapture(e.pointerId); } catch (x) {} });
+  pad.addEventListener('pointermove', e => { if (down) pp = [e.clientX, e.clientY]; });
+  ['pointerup', 'pointercancel'].forEach(n => pad.addEventListener(n, () => { down = false; }));
+});
 
 /* ---------- start ---------- */
 function setStatus() {
   const el = $('status');
   if (!running) { el.dataset.state = 'off'; el.textContent = 'sensor off'; }
+  else if (linked) { el.dataset.state = 'link'; el.textContent = 'phone ' + Math.round(1000 / rateDt) + ' Hz'; }
   else if (gotSensor) { el.dataset.state = 'live'; el.textContent = 'live ' + Math.round(1000 / rateDt) + ' Hz'; }
   else if (simOn) { el.dataset.state = 'sim'; el.textContent = 'simulated'; }
   else { el.dataset.state = 'off'; el.textContent = 'looking for sensor'; }
 }
 function notice(msg) { const n = $('notice'); n.textContent = msg; n.hidden = !msg; }
+function setRunning() {
+  running = true; initAudio(); setStatus(); $('view-msg').textContent = '';
+  $('b-start').disabled = true; $('b-start').textContent = linked ? 'Phone linked' : 'Sensors running';
+  ['b-round', 'b-rec', 'b-cap'].forEach(id => { $(id).disabled = false; });
+}
 async function start() {
   if (running) return;
-  running = true; initAudio(); setStatus();
-  $('b-start').disabled = true; $('b-start').textContent = 'Sensors running';
+  setRunning();
   let granted = true;
   try {
     if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function')
@@ -308,9 +485,8 @@ async function start() {
   } catch (e) { granted = false; }
   window.addEventListener('devicemotion', onMotion);   // harmless if access was refused: no events arrive
   try { if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(() => {}); } catch (e) {}
-  ['b-round', 'b-rec'].forEach(id => { $(id).disabled = false; });
   setTimeout(() => {
-    if (gotSensor) return;
+    if (gotSensor || linked) return;
     startSim();
     notice(window.claude
       ? 'This page cannot read motion sensors when it is opened inside Claude. It is running on simulated motion from the drag pad. Open the hosted copy of the same file in your phone browser for real sensor data.'
@@ -319,6 +495,8 @@ async function start() {
   }, 1200);
 }
 $('b-start').addEventListener('click', start);
+$('b-centre').addEventListener('click', () => fuse.centre());
+document.addEventListener('keydown', e => { if (e.key === 'r' && !/INPUT|TEXTAREA/.test(e.target.tagName)) fuse.centre(); });
 
 /* ---------- feedback: sound and vibration ---------- */
 let ac = null, noiseBuf = null;
@@ -417,7 +595,7 @@ function onDetector(ev) {
   showWindow(ev);
   if (ev.type === 'none') return;
   events.unshift(ev); if (events.length > 40) events.pop(); renderLog();
-  fb[ev.type]();
+  fb[ev.type](); viewFlash(LABEL[ev.type], C[ev.type], ev.type); linkSend({ev: ev.type});
   if (game.on && game.cur) {
     const c = game.cur;
     if (c.kind === 'hold') resolve(false, ev.type, now); else resolve(ev.type === c.kind, ev.type, now);
@@ -553,24 +731,27 @@ function csv() {
   for (const r of rec) lines.push([r[0].toFixed(1), ...r[1].map(f), ...r[2].map(f), ...r[3].map(f), f(r[4]), f(r[5]), f(r[6]), f(r[7]), q(r[8]), r[9], r[10]].join(','));
   return lines.join('\n') + '\n';
 }
-async function save() {
-  if (!rec.length) return;
+const sourceName = () => linked ? 'phone-link' : gotSensor ? 'imu' : 'sim';
+function stamp() {
   const d = new Date(), z = n => String(n).padStart(2, '0');
-  const stamp = d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate()) + '-' + z(d.getHours()) + z(d.getMinutes()) + z(d.getSeconds());
-  const label = ($('i-label').value.trim() || 'take').replace(/[^a-z0-9_-]+/gi, '-');
-  const name = 'gesture-lab_' + (gotSensor ? 'imu' : 'sim') + '_' + label + '_' + stamp + '.csv', text = csv();
-  const msg = $('rec-msg');
+  return d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate()) + '-' + z(d.getHours()) + z(d.getMinutes()) + z(d.getSeconds());
+}
+const clean = (s, d) => (String(s).trim() || d).replace(/[^a-z0-9_-]+/gi, '-');
+async function download(name, text, msg) {
   if (window.claude && window.claude.use) {
     try {
       const dl = await window.claude.use('downloads');
-      if (!dl) { msg.textContent = 'Saving files is not available in this view.'; return; }
-      await dl.save({filename: name, data: text}); msg.textContent = 'Saved ' + name + '.';
-    } catch (e) { msg.textContent = e && e.code === 'declined' ? 'Save cancelled.' : 'The file could not be saved here.'; }
-    return;
+      if (!dl) { msg.textContent = 'Saving files is not available in this view.'; return false; }
+      await dl.save({filename: name, data: text}); msg.textContent = 'Saved ' + name + '.'; return true;
+    } catch (e) { msg.textContent = e && e.code === 'declined' ? 'Save cancelled.' : 'The file could not be saved here.'; return false; }
   }
   const url = URL.createObjectURL(new Blob([text], {type: 'text/csv'})), a = document.createElement('a');
   a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 4000); msg.textContent = 'Saved ' + name + '.';
+  setTimeout(() => URL.revokeObjectURL(url), 4000); msg.textContent = 'Saved ' + name + '.'; return true;
+}
+function save() {
+  if (!rec.length) return;
+  return download('gesture-lab_' + sourceName() + '_' + clean($('i-label').value, 'take') + '_' + stamp() + '.csv', csv(), $('rec-msg'));
 }
 $('b-save').addEventListener('click', save);
 
@@ -593,6 +774,267 @@ function showWindow(ev) {
   rows.forEach(([k, v], i) => { const a = document.createElement('span'), b = document.createElement('span'); a.className = 'dim'; a.textContent = k; b.textContent = v; if (!i) b.className = 'tag-' + ev.type; kv.append(a, b); });
 }
 
+/* ---------- 3D view: a wand, blaster or blade that follows the tracked orientation ----------
+   Items are modelled in the device frame with the grip at the origin and the tip along +y
+   (the top edge of the phone), so the same rotation that describes the phone moves the item. */
+const ITEM_COL = {wand: 0xf2a93b, blaster: 0x4fd1b5, blade: 0x8ea2ff};
+let V = null, item = store.get('gl-item', 'wand'); if (!ITEM_COL[item]) item = 'wand';
+let flash = {t: -1e9, kind: ''};
+function viewFlash(text, col, kind) {
+  const el = $('view-flash'); el.textContent = text; el.style.color = col; el.classList.add('on');
+  void el.offsetWidth; requestAnimationFrame(() => el.classList.remove('on'));
+  flash = {t: performance.now(), kind: kind || ''};
+}
+function setItem(name) {
+  item = name; store.set('gl-item', name);
+  document.querySelectorAll('#items button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.item === name)));
+  if (V) { Object.keys(V.items).forEach(k => { V.items[k].visible = k === name; }); V.hist.length = 0; }
+}
+document.querySelectorAll('#items button').forEach(b => b.addEventListener('click', () => setItem(b.dataset.item)));
+function buildItems(T) {
+  const mat = (color, o) => new T.MeshStandardMaterial(Object.assign({color, roughness: 0.55, metalness: 0.25}, o));
+  const glow = color => new T.MeshStandardMaterial({color, emissive: color, emissiveIntensity: 1.4, roughness: 0.4});
+  const put = (g, geo, m, x, y, z) => { const o = new T.Mesh(geo, m); o.position.set(x, y, z); g.add(o); return o; };
+  const ringY = (r, tube) => { const g = new T.TorusGeometry(r, tube, 10, 28); g.rotateX(Math.PI / 2); return g; };
+  const items = {};
+
+  const wand = new T.Group(), wood = mat(0x6b4632, {roughness: 0.7}), dark = mat(0x3a241b, {roughness: 0.8}), gold = mat(0xd9a441, {metalness: 0.7, roughness: 0.3});
+  put(wand, new T.CylinderGeometry(0.03, 0.036, 0.26, 20), dark, 0, 0, 0);
+  put(wand, new T.SphereGeometry(0.042, 20, 14), gold, 0, -0.14, 0);
+  put(wand, ringY(0.034, 0.009), gold, 0, 0.13, 0); put(wand, ringY(0.037, 0.007), gold, 0, -0.06, 0);
+  put(wand, new T.CylinderGeometry(0.011, 0.027, 0.7, 16), wood, 0, 0.48, 0);
+  put(wand, new T.SphereGeometry(0.024, 16, 12), glow(ITEM_COL.wand), 0, 0.84, 0);
+  wand.userData = {tip: new T.Vector3(0, 0.84, 0), base: new T.Vector3(0, 0.5, 0)}; items.wand = wand;
+
+  const bl = new T.Group(), shell = mat(0x4a5280, {metalness: 0.45, roughness: 0.4}), trim = mat(0x1c1e30, {roughness: 0.6}), tg = glow(ITEM_COL.blaster);
+  put(bl, new T.BoxGeometry(0.11, 0.44, 0.14), shell, 0, 0.2, 0.02);
+  put(bl, new T.BoxGeometry(0.075, 0.12, 0.25), trim, 0, 0.03, -0.15).rotation.x = -0.25;
+  put(bl, new T.CylinderGeometry(0.036, 0.042, 0.3, 20), trim, 0, 0.55, 0.02);
+  put(bl, ringY(0.046, 0.012), tg, 0, 0.7, 0.02); put(bl, ringY(0.044, 0.008), tg, 0, 0.48, 0.02);
+  put(bl, new T.BoxGeometry(0.022, 0.26, 0.05), trim, 0, 0.22, 0.11);
+  put(bl, new T.BoxGeometry(0.118, 0.16, 0.035), tg, 0, 0.2, 0.02);
+  const ray = put(bl, new T.CylinderGeometry(0.004, 0.004, 6, 6), new T.MeshBasicMaterial({color: ITEM_COL.blaster, transparent: true, opacity: 0.35, blending: T.AdditiveBlending, depthWrite: false}), 0, 3.72, 0.02);
+  bl.userData = {tip: new T.Vector3(0, 0.72, 0.02), base: new T.Vector3(0, 0.5, 0.02), ray}; items.blaster = bl;
+
+  const kt = new T.Group(), steel = mat(0xdfe5f2, {metalness: 0.6, roughness: 0.22}), wrap = mat(0x20223a, {roughness: 0.9});
+  put(kt, new T.CylinderGeometry(0.026, 0.028, 0.28, 16), wrap, 0, 0, 0);
+  for (let i = 0; i < 5; i++) put(kt, ringY(0.029, 0.005), mat(0x8ea2ff, {roughness: 0.6}), 0, -0.1 + i * 0.05, 0);
+  put(kt, new T.CylinderGeometry(0.075, 0.075, 0.014, 28), mat(0x2b2d45, {metalness: 0.6, roughness: 0.35}), 0, 0.15, 0);
+  const sh = new T.Shape(); sh.moveTo(0, 0.026); sh.lineTo(0.7, 0.026); sh.lineTo(0.79, -0.026); sh.lineTo(0, -0.026); sh.closePath();   // edge on the -z side
+  const bg = new T.ExtrudeGeometry(sh, {depth: 0.008, bevelEnabled: false}); bg.translate(0, 0, -0.004);
+  bg.applyMatrix4(new T.Matrix4().makeBasis(new T.Vector3(0, 1, 0), new T.Vector3(0, 0, 1), new T.Vector3(1, 0, 0)));   // shape x→item y, shape y→item z, thickness→item x
+  put(kt, bg, steel, 0, 0.157, 0);
+  put(kt, new T.BoxGeometry(0.01, 0.72, 0.004), glow(ITEM_COL.blade), 0, 0.52, -0.027);
+  kt.userData = {tip: new T.Vector3(0, 0.94, -0.02), base: new T.Vector3(0, 0.4, 0)}; items.blade = kt;
+  return items;
+}
+async function initView() {
+  const el = $('view3d');
+  try {
+    await load(CDN.three);
+    const T = window.THREE, renderer = new T.WebGLRenderer({antialias: true});
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); el.appendChild(renderer.domElement);
+    const scene = new T.Scene(); scene.background = new T.Color(0x0b0c14); scene.fog = new T.Fog(0x0b0c14, 3.5, 9);
+    const camera = new T.PerspectiveCamera(40, 4 / 3, 0.05, 30); camera.position.set(0.9, 0.62, 1.55); camera.lookAt(0, 0.08, -0.38);
+    scene.add(new T.HemisphereLight(0xc6ceff, 0x241c2c, 1.0));
+    const sun = new T.DirectionalLight(0xffffff, 0.9); sun.position.set(1.5, 2.5, 2); scene.add(sun);
+    const grid = new T.GridHelper(10, 40, 0x3d4270, 0x1f2238); grid.position.y = -0.6; scene.add(grid);
+    const rig = new T.Group(); rig.scale.setScalar(1.25); scene.add(rig);
+    const items = buildItems(T); Object.keys(items).forEach(k => { rig.add(items[k]); items[k].visible = k === item; });
+    const lamp = new T.PointLight(0xffffff, 0.8, 2.5); rig.add(lamp);
+    const N = 30, pos = new Float32Array(N * 6), col = new Float32Array(N * 6), idx = [];
+    for (let i = 0; i < N - 1; i++) idx.push(2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 1, 2 * i + 3, 2 * i + 2);
+    const tg = new T.BufferGeometry(); tg.setAttribute('position', new T.BufferAttribute(pos, 3)); tg.setAttribute('color', new T.BufferAttribute(col, 3)); tg.setIndex(idx);
+    const trail = new T.Mesh(tg, new T.MeshBasicMaterial({vertexColors: true, transparent: true, blending: T.AdditiveBlending, side: T.DoubleSide, depthWrite: false}));
+    trail.frustumCulled = false; scene.add(trail);
+    V = {T, renderer, scene, camera, rig, items, lamp, trail, pos, col, N, hist: [], w: 0, h: 0, base: new T.Color(), hot: new T.Color()};
+  } catch (e) { $('view-msg').textContent = 'The 3D view could not load on this device or connection. Everything else still works.'; }
+}
+function drawView(now) {
+  if (!V || $('lab').hidden) return;
+  const el = $('view3d'), w = el.clientWidth, h = el.clientHeight; if (!w || !h) return;
+  if (w !== V.w || h !== V.h) { V.w = w; V.h = h; V.renderer.setSize(w, h, false); V.camera.aspect = w / h; V.camera.updateProjectionMatrix(); }
+  const q = fuse.shown, it = V.items[item], u = it.userData;
+  V.rig.quaternion.set(q[1], q[2], q[3], q[0]); V.rig.updateMatrixWorld(true);
+  V.lamp.position.copy(u.tip); V.lamp.color.setHex(ITEM_COL[item]);
+  const tip = u.tip.clone().applyMatrix4(V.rig.matrixWorld), base = u.base.clone().applyMatrix4(V.rig.matrixWorld);
+  V.hist.unshift([tip, base]); if (V.hist.length > V.N) V.hist.pop();
+  const k = Math.max(0, 1 - (now - flash.t) / 500);                    // just after a gesture the trail takes that gesture's colour
+  V.base.setHex(ITEM_COL[item]); if (k && C[flash.kind]) V.base.lerp(V.hot.set(C[flash.kind]), k);
+  for (let i = 0; i < V.N; i++) {
+    const p = V.hist[Math.min(i, V.hist.length - 1)], f = Math.pow(1 - i / (V.N - 1), 2) * (0.55 + 0.45 * k);
+    for (let j = 0; j < 2; j++) { const o = (2 * i + j) * 3, v = p[j]; V.pos[o] = v.x; V.pos[o + 1] = v.y; V.pos[o + 2] = v.z; V.col[o] = V.base.r * f; V.col[o + 1] = V.base.g * f; V.col[o + 2] = V.base.b * f; }
+  }
+  V.trail.geometry.attributes.position.needsUpdate = true; V.trail.geometry.attributes.color.needsUpdate = true;
+  V.renderer.render(V.scene, V.camera);
+}
+
+/* ---------- phone link: one screen shows the lab, a phone sends its motion to it ----------
+   Uses PeerJS (WebRTC). The two browsers find each other through PeerJS's public pairing
+   server using a short code, then samples travel directly between them.
+   window.GL_PEER can point at a self-hosted PeerServer instead. */
+let peer = null, conn = null, tOff = null, lastRemote = 0;
+const peerOpts = () => Object.assign({}, window.GL_PEER || {});
+const linkSend = m => { if (conn && conn.open && !deliver) { try { conn.send(m); } catch (e) {} } };
+const peerError = e => e && e.type === 'peer-unavailable' ? 'No screen is waiting with that code. Check the code and try again.'
+  : e && e.type === 'unavailable-id' ? 'That code is in use. Press Link a phone again for a new one.'
+  : 'The pairing service could not be reached. Check the connection and try again.';
+async function hostLink() {
+  const card = $('link-card'), msg = $('link-msg'); card.hidden = false; initAudio();
+  if (peer) return;
+  try { await load(CDN.peer); } catch (e) { msg.textContent = 'The link library could not load. Check the connection and try again.'; return; }
+  const abc = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789', code = Array.from({length: 5}, () => abc[Math.floor(Math.random() * abc.length)]).join('');
+  peer = new window.Peer('gesturelab-' + code, peerOpts());
+  peer.on('open', async () => {
+    $('link-code').textContent = code;
+    const web = /^https?:$/.test(location.protocol) && !window.claude, url = location.href.split('#')[0] + '#s=' + code;
+    msg.textContent = web ? 'Scan this with the phone camera, or open this page on the phone, tap "This phone is the sensor" and type the code.'
+                          : 'Open the hosted copy of Gesture Lab on the phone, tap "This phone is the sensor" and type the code.';
+    if (web) try { await load(CDN.qr); const q = window.qrcode(0, 'M'); q.addData(url); q.make(); $('qr').innerHTML = q.createSvgTag({cellSize: 4, margin: 2, scalable: true}); $('qr').hidden = false; } catch (e) {}
+  });
+  peer.on('connection', c => {
+    if (conn && conn.open) { c.close(); return; }
+    conn = c; tOff = null;
+    c.on('data', d => {
+      if (!Array.isArray(d) || d.length < 11) return;
+      lastRemote = performance.now();
+      if (!linked) { linked = true; stopSim(); notice(''); fuse.reset(); setRunning(); card.hidden = true; viewFlash('PHONE LINKED', C.text); }
+      const est = performance.now() - d[0]; if (tOff == null || est < tOff) tOff = est;      // phone clock to this clock, using the fastest packet seen
+      const hasLinear = !!d[10];
+      ingest(d[0] + tOff, hasLinear ? [d[1], d[2], d[3]] : null, [d[4], d[5], d[6]], [d[7], d[8], d[9]], hasLinear);
+    });
+    c.on('close', () => { if (conn === c) linkLost(); });
+  });
+  peer.on('error', e => { msg.textContent = peerError(e); if (e && e.type !== 'peer-unavailable') { try { peer.destroy(); } catch (x) {} peer = null; } });
+}
+function linkLost() {
+  if (!linked) return;
+  linked = false; try { if (conn) conn.close(); } catch (e) {} conn = null; setStatus();
+  $('b-start').textContent = 'Phone link lost'; $('link-card').hidden = false;
+  $('link-msg').textContent = 'The phone stopped sending. Press Start sending on the phone again with the same code.';
+  if (cap.on) capStop('The phone link dropped, so capture stopped.');
+}
+const linkWatch = now => { if (linked && now - lastRemote > 3000) linkLost(); };   // a closed phone tab does not always announce itself
+$('b-link').addEventListener('click', hostLink);
+
+/* sender side: this page running on the phone that is being swung */
+let sent = 0, sending = false;
+function enterSender(code) {
+  $('lab').hidden = true; $('sender').hidden = false; $('snd-code').value = code || ''; $('snd-flip').checked = flip;
+}
+function sndStatus(state, text, msg) { const el = $('snd-status'); el.dataset.state = state; el.textContent = text; if (msg) $('snd-msg').textContent = msg; }
+async function startSender() {
+  const code = $('snd-code').value.trim().toUpperCase();
+  if (code.length !== 5) { sndStatus('off', 'not linked', 'Enter the five character code shown on the other screen.'); return; }
+  if (sending) return; sending = true; $('snd-go').disabled = true;
+  let granted = true;
+  try {
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function')
+      granted = (await DeviceMotionEvent.requestPermission()) === 'granted';
+  } catch (e) { granted = false; }
+  const fail = m => { sending = false; deliver = null; $('snd-go').disabled = false; sndStatus('off', 'not linked', m); try { if (peer) peer.destroy(); } catch (x) {} peer = null; conn = null; };
+  if (!granted) { fail('Motion access was not allowed. Reload the page to be asked again.'); return; }
+  sndStatus('sim', 'connecting', 'Connecting to the other screen.');
+  try { await load(CDN.peer); } catch (e) { fail('The link library could not load. Check the connection and try again.'); return; }
+  try { if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(() => {}); } catch (e) {}
+  peer = new window.Peer(peerOpts());
+  peer.on('error', e => fail(peerError(e)));
+  peer.on('open', () => {
+    const c = peer.connect('gesturelab-' + code, {serialization: 'json', reliable: false}); conn = c;
+    c.on('open', () => {
+      sndStatus('live', 'sending', 'Linked. Point the top of the phone at the other screen and press Recentre there.');
+      deliver = (t, a, aig, w, hasLinear) => {
+        if (!c.open) return; const r = v => Math.round(v * 1000) / 1000, z = a || [0, 0, 0];
+        c.send([Math.round(t * 10) / 10, r(z[0]), r(z[1]), r(z[2]), r(aig[0]), r(aig[1]), r(aig[2]), r(w[0]), r(w[1]), r(w[2]), hasLinear ? 1 : 0]);
+        sent++; if (lastT) rateDt = 0.95 * rateDt + 0.05 * (t - lastT); lastT = t;
+      };
+      window.addEventListener('devicemotion', onMotion);
+      setTimeout(() => { if (sending && !sent) $('snd-msg').textContent = 'Linked, but this device is not reporting motion. Use a phone, and open the page over HTTPS.'; }, 1500);
+    });
+    c.on('data', d => { if (d && d.ev) buzz(d.ev === 'chop' ? [20, 25, 45] : 35); else if (d && d.cue) buzz(d.cue === 'go' ? 60 : 15); });
+    c.on('close', () => fail('The link closed. Press Start sending to link again.'));
+  });
+}
+function sendUi() { if ($('sender').hidden) return; $('snd-n').textContent = sent; $('snd-rate').textContent = (sent ? Math.round(1000 / rateDt) : 0) + ' Hz'; }
+$('snd-go').addEventListener('click', startSender);
+$('b-send').addEventListener('click', () => enterSender(''));
+$('snd-back').addEventListener('click', () => { if (sending) { location.hash = ''; location.reload(); return; } $('sender').hidden = true; $('lab').hidden = false; });
+function setFlip(on) { flip = on; store.set('gl-flip', on ? '1' : '0'); $('t-flip').checked = $('snd-flip').checked = on; fuse.reset(); }
+['t-flip', 'snd-flip'].forEach(id => $(id).addEventListener('change', e => setFlip(e.target.checked)));
+$('t-flip').checked = flip;
+
+/* ---------- guided capture: one labelled clip per repeat, for training a model later ---------- */
+const PRE = 250, CLIP = 1500, READY = 900, REST_MS = 700;
+let classes = ['slide', 'chop', 'still', 'other'];
+try { const c = JSON.parse(store.get('gl-classes', 'null')); if (Array.isArray(c) && c.length) classes = c; } catch (e) {}
+let curClass = classes[0], clipSeq = 0, unsaved = false, clearArmed = false;
+const clips = [], SESSION = 'S' + stamp();
+const cap = {on: false, phase: '', label: '', left: 0, total: 0, tGo: 0, tRest: 0};
+function cue(text, col) { const el = $('cue'); el.textContent = text || ' '; el.style.color = col || ''; }
+function renderClasses() {
+  const box = $('classes'); box.innerHTML = '';
+  classes.forEach(c => { const b = document.createElement('button'); b.textContent = c; b.setAttribute('aria-pressed', String(c === curClass)); b.addEventListener('click', () => { if (!cap.on) { curClass = c; renderClasses(); } }); box.appendChild(b); });
+}
+function addClass() {
+  const name = $('i-class').value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, ''); if (!name) return;
+  if (!classes.includes(name)) { classes.push(name); store.set('gl-classes', JSON.stringify(classes)); }
+  curClass = name; $('i-class').value = ''; renderClasses(); renderClips();
+}
+$('b-addclass').addEventListener('click', addClass);
+$('i-class').addEventListener('keydown', e => { if (e.key === 'Enter') addClass(); });
+const agrees = c => (c.label === 'slide' || c.label === 'chop') ? c.rule === c.label : c.rule === 'none';
+function renderClips() {
+  const names = classes.concat(clips.map(c => c.label).filter((l, i, a) => !classes.includes(l) && a.indexOf(l) === i));
+  let h = '<tr><th>Gesture</th><th>Clips</th><th>Rules agree</th></tr>';
+  names.forEach(n => { const cs = clips.filter(c => c.label === n); h += '<tr><td>' + n + '</td><td>' + cs.length + '</td><td>' + (cs.length ? cs.filter(agrees).length + ' of ' + cs.length : '') + '</td></tr>'; });
+  $('c-table').innerHTML = h;
+  $('b-undo').disabled = $('b-dsave').disabled = $('b-dclear').disabled = !clips.length;
+  clearArmed = false; $('b-dclear').textContent = 'Clear clips';
+}
+function capStop(text) { cap.on = false; cap.phase = ''; $('b-cap').textContent = 'Capture'; cue(text, ''); }
+function capStart() {
+  if (cap.on) { capStop('Stopped.'); return; }
+  if (!running) return;
+  const n = Math.min(50, Math.max(1, parseInt($('i-reps').value, 10) || 10));
+  Object.assign(cap, {on: true, phase: '', label: curClass, left: n, total: n}); $('b-cap').textContent = 'Stop';
+}
+function capTick(t) {
+  if (!cap.on) return;
+  const ask = cap.label === 'still' ? 'HOLD STILL' : cap.label.toUpperCase(), rep = cap.total - cap.left + 1;
+  if (cap.phase === '') {
+    cap.phase = 'ready'; cap.tGo = t + READY; cue('Ready  ' + rep + ' of ' + cap.total, C.dim); tone('sine', 440, 440, 0.07, 0.12); linkSend({cue: 'ready'});
+  } else if (cap.phase === 'ready' && t >= cap.tGo) {
+    cap.phase = 'move'; cue('GO: ' + ask, C.slide); tone('sine', 880, 880, 0.14, 0.3); buzz(60); linkSend({cue: 'go'}); viewFlash(ask, C.text);
+  } else if (cap.phase === 'move' && t >= cap.tGo - PRE + CLIP) {
+    const t0 = cap.tGo - PRE, rows = buf.filter(s => s.t >= t0 && s.t <= t0 + CLIP);
+    if (rows.length < 10) { capStop('Too little sensor data arrived, so capture stopped.'); return; }
+    const hit = rows.find(s => s.ev);
+    clips.push({id: SESSION + '-' + String(++clipSeq).padStart(3, '0'), label: cap.label, who: clean($('i-who').value, 'P00'), session: SESSION, item, source: sourceName(), rep,
+      rule: hit ? hit.ev : 'none', rows: rows.map(s => [s.t - t0, s.a, s.aig, s.w, s.yaw, s.tilt, s.aH, s.aV, s.ev])});
+    unsaved = true; cap.left--; renderClips();
+    if (!cap.left) { capStop('Done: ' + cap.total + ' clips of ' + cap.label + '.'); tone('triangle', 660, 1100, 0.16, 0.25); }
+    else { cap.phase = 'rest'; cap.tRest = t + REST_MS; cue('Rest', C.dim); }
+  } else if (cap.phase === 'rest' && t >= cap.tRest) cap.phase = '';
+}
+$('b-cap').addEventListener('click', capStart);
+$('b-undo').addEventListener('click', () => { clips.pop(); renderClips(); });
+$('b-dclear').addEventListener('click', () => {
+  if (!clearArmed) { clearArmed = true; $('b-dclear').textContent = 'Tap again to delete ' + clips.length + ' clips'; return; }
+  clips.length = 0; unsaved = false; renderClips();
+});
+const DS_HEADER = 'clip_id,label,participant,session,item,source,rep,t_ms,acc_x,acc_y,acc_z,accg_x,accg_y,accg_z,rot_x,rot_y,rot_z,yaw_rate,tilt_rate,acc_h,acc_v,rule_event';
+function datasetCsv() {
+  const f = v => v.toFixed(4), lines = [DS_HEADER];
+  for (const c of clips) { const head = [c.id, c.label, c.who, c.session, c.item, c.source, c.rep].join(',');
+    for (const r of c.rows) lines.push([head, r[0].toFixed(1), ...r[1].map(f), ...r[2].map(f), ...r[3].map(f), f(r[4]), f(r[5]), f(r[6]), f(r[7]), r[8]].join(',')); }
+  return lines.join('\n') + '\n';
+}
+$('b-dsave').addEventListener('click', async () => {
+  if (!clips.length) return;
+  if (await download('gesture-dataset_' + clean($('i-who').value, 'P00') + '_' + stamp() + '.csv', datasetCsv(), $('cap-msg'))) unsaved = false;
+});
+window.addEventListener('beforeunload', e => { if (unsaved) { e.preventDefault(); e.returnValue = ''; } });
+
 /* ---------- tuning ---------- */
 const TUNE = [['start', 't-start', 'v-start', v => v + ' °/s', 1], ['sweep', 't-sweep', 'v-sweep', v => v + '°', 1], ['dom', 't-dom', 'v-dom', v => v + '%', 100], ['acc', 't-acc', 'v-acc', v => v + ' m/s²', 1], ['peak', 't-peak', 'v-peak', v => v + ' °/s', 1]];
 function syncTune() { TUNE.forEach(([k, i, o, fmt, mul]) => { const v = Math.round(P[k] * mul); $(i).value = v; $(o).textContent = fmt(v); }); }
@@ -603,11 +1045,11 @@ TUNE.forEach(([k, i, o, fmt, mul]) => $(i).addEventListener('input', () => {
 $('b-reset').addEventListener('click', () => { Object.assign(P, DEFAULTS); syncTune(); try { localStorage.removeItem('gl-params'); } catch (e) {} });
 
 /* ---------- tabs and main loop ---------- */
-let tab = 'play';
+let tab = 'collect';
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
   tab = b.dataset.tab;
   document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', String(x === b)));
-  ['play', 'signals', 'record', 'tune'].forEach(t => { $('p-' + t).hidden = t !== tab; });
+  ['collect', 'play', 'signals', 'tune'].forEach(t => { $('p-' + t).hidden = t !== tab; });
 }));
 let slow = 0;
 function frame(now) {
@@ -617,8 +1059,9 @@ function frame(now) {
     else if (!game.cur && now >= game.nextAt) spawn(now);
   }
   if (tab === 'play') drawScene(now); else if (tab === 'signals') drawPlot(now);
+  drawView(now);
   if (now - slow > 300) {
-    slow = now; if (game.on) hud(); if (running) setStatus(); recUi();
+    slow = now; if (game.on) hud(); if (running) setStatus(); recUi(); sendUi(); linkWatch(now);
     if (lastS) {
       $('s-rate').textContent = Math.round(1000 / rateDt) + ' Hz';
       $('s-yaw').textContent = Math.round(lastS.yaw) + ' °/s'; $('s-tilt').textContent = Math.round(lastS.tilt) + ' °/s';
@@ -627,7 +1070,9 @@ function frame(now) {
   }
   requestAnimationFrame(frame);
 }
-syncTune(); setLegend(); requestAnimationFrame(frame);
-window.__gl = {det, ingest, game, events, get rec() { return rec; }, csv};
+syncTune(); setLegend(); renderClasses(); renderClips(); setItem(item); initView();
+{ const m = /^#s=([A-Za-z0-9]{5})$/.exec(location.hash); if (m) enterSender(m[1].toUpperCase()); }
+requestAnimationFrame(frame);
+window.__gl = {det, ingest, game, events, get rec() { return rec; }, csv, fuse, clips, datasetCsv, cap, get view() { return V; }};
 })();
 </script>
