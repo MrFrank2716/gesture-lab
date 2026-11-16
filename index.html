@@ -10,8 +10,8 @@
 <title>Gesture Lab</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-/* Layout: one narrow phone-first column. Status bar, tab strip, one panel at a time,
-   and a drag pad under the panel when no motion sensor is available.
+/* Layout: one narrow phone-first column. Status bar, start bar, tab strip, one panel at a time,
+   and a drag pad when no motion sensor is available.
    Single dark look on purpose: it stands in for a dark ride and is used in dim rooms. */
 :root{
   color-scheme:dark;
@@ -32,27 +32,37 @@ h2{font-family:var(--display);font-weight:500;font-size:16px;margin:0;text-wrap:
 p{margin:0}
 .dim{color:var(--dim)}
 .small{font-size:13px}
-.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .pill{font-family:var(--mono);font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);color:var(--dim);white-space:nowrap}
 .pill[data-state="live"]{color:var(--chop);border-color:var(--chop)}
 .pill[data-state="sim"]{color:var(--hold);border-color:var(--hold)}
-.tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:var(--panel);padding:4px;border-radius:10px}
-.tabs button{font-family:var(--display);font-weight:500;font-size:14px;background:none;border:0;color:var(--dim);padding:9px 4px;border-radius:7px;cursor:pointer}
+.tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;background:var(--panel);padding:4px;border-radius:10px}
+.tabs button{font-family:var(--display);font-weight:500;font-size:13px;background:none;border:0;color:var(--dim);padding:9px 2px;border-radius:7px;cursor:pointer}
 .tabs button[aria-selected="true"]{background:var(--raised);color:var(--text)}
-button:focus-visible,input:focus-visible{outline:2px solid var(--hold);outline-offset:2px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--hold);outline-offset:2px}
 .panel{display:flex;flex-direction:column;gap:12px}
 canvas{display:block;width:100%;border-radius:12px;background:#0b0c14}
 #scene{aspect-ratio:4/3;max-width:100%}
 #plot{height:300px}
+#spark{height:64px}
+.stage{position:relative}
+#view{aspect-ratio:1/1;max-width:100%;max-height:62vh;touch-action:pan-y}
+#flash{position:absolute;left:0;right:0;bottom:14px;text-align:center;font-family:var(--display);font-weight:700;font-size:30px;letter-spacing:.06em;pointer-events:none;opacity:0;transition:opacity .5s}
+#flash.on{opacity:1;transition:none}
+#guess{position:absolute;left:12px;top:10px;font-family:var(--mono);font-size:12px;color:var(--dim);pointer-events:none}
+#no3d{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;color:var(--dim)}
 .hud{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .hud div{background:var(--panel);border-radius:10px;padding:8px 12px}
 .hud span{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
 .hud b{font-family:var(--mono);font-weight:500;font-size:20px;font-variant-numeric:tabular-nums}
 .btn{font-family:var(--display);font-weight:700;font-size:16px;border:0;border-radius:10px;padding:13px 18px;cursor:pointer;background:var(--slide);color:#1d1403}
 .btn.ghost{background:var(--raised);color:var(--text);font-weight:500}
+.btn.sm{font-size:14px;padding:9px 12px}
 .btn:disabled{opacity:.45;cursor:default}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .row>.btn{flex:1 1 auto}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-family:var(--display);font-weight:500;font-size:14px;border:1px solid var(--line);background:none;color:var(--dim);border-radius:999px;padding:7px 13px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--text);color:var(--ink);border-color:var(--text)}
 .card{background:var(--panel);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--dim)}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}
@@ -61,17 +71,20 @@ th,td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--line)}
 th:first-child,td:first-child{text-align:left}
 th{font-weight:500;color:var(--dim);font-size:12px;letter-spacing:.06em;text-transform:uppercase}
 td{font-family:var(--mono);font-variant-numeric:tabular-nums}
-label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--dim)}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--dim);min-width:0}
 label .lv{display:flex;justify-content:space-between}
 label .lv b{color:var(--text);font-family:var(--mono);font-weight:500}
 input[type=range]{width:100%;accent-color:var(--slide)}
-input[type=text]{background:var(--ink);border:1px solid var(--line);border-radius:8px;color:var(--text);font:inherit;padding:10px 12px;width:100%}
-#pad{touch-action:none;user-select:none;-webkit-user-select:none;height:120px;border:1px dashed var(--hold);border-radius:12px;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--hold);padding:10px;cursor:grab}
+input[type=text],select{background:var(--ink);border:1px solid var(--line);border-radius:8px;color:var(--text);font:inherit;padding:10px 12px;width:100%}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+#pad{touch-action:none;user-select:none;-webkit-user-select:none;height:110px;border:1px dashed var(--hold);border-radius:12px;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--hold);padding:10px;cursor:grab}
 #log{font-family:var(--mono);font-size:12px;color:var(--dim);max-height:150px;overflow:auto;white-space:pre-wrap;margin:0}
 .kv{display:grid;grid-template-columns:1fr auto;gap:4px 12px;font-size:14px}
 .kv span:nth-child(even){font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
 .tag-slide{color:var(--slide)} .tag-chop{color:var(--chop)} .tag-none{color:var(--dim)}
 #notice{border-left:3px solid var(--hold);padding:8px 12px;background:var(--panel);border-radius:0 8px 8px 0}
+#cap-big{font-family:var(--display);font-weight:700;font-size:22px;text-wrap:balance}
+#cap-big b{color:var(--slide)}
 </style>
 
 <div class="wrap">
@@ -80,46 +93,103 @@ input[type=text]{background:var(--ink);border:1px solid var(--line);border-radiu
     <span class="pill" id="status" data-state="off">sensor off</span>
   </header>
 
+  <button class="btn" id="b-start">Start sensors</button>
+
   <div class="tabs" role="tablist">
-    <button role="tab" id="tab-play" aria-selected="true" data-tab="play">Play</button>
+    <button role="tab" id="tab-prop" aria-selected="true" data-tab="prop">Prop</button>
+    <button role="tab" id="tab-collect" aria-selected="false" data-tab="collect">Collect</button>
+    <button role="tab" id="tab-play" aria-selected="false" data-tab="play">Game</button>
     <button role="tab" id="tab-signals" aria-selected="false" data-tab="signals">Signals</button>
-    <button role="tab" id="tab-record" aria-selected="false" data-tab="record">Record</button>
     <button role="tab" id="tab-tune" aria-selected="false" data-tab="tune">Tune</button>
   </div>
 
   <p id="notice" class="small" hidden></p>
-
   <div id="pad" hidden>Drag here to fake motion.<br>Sideways for a slide, downward for a chop.</div>
 
-  <section class="panel" id="p-play">
+  <section class="panel" id="p-prop">
+    <div class="stage">
+      <canvas id="view"></canvas>
+      <div id="guess"></div>
+      <div id="flash"></div>
+      <div id="no3d" hidden>The 3D view could not start in this browser.</div>
+    </div>
+    <div class="chips" id="props" role="group" aria-label="Prop">
+      <button class="chip" data-prop="wand" aria-pressed="true">Wand</button>
+      <button class="chip" data-prop="blaster" aria-pressed="false">Blaster</button>
+      <button class="chip" data-prop="katana" aria-pressed="false">Katana</button>
+      <button class="chip" data-prop="shuriken" aria-pressed="false">Shuriken</button>
+    </div>
+    <div class="row">
+      <button class="btn ghost sm" id="b-centre">Recentre</button>
+      <button class="btn ghost sm" id="b-mode">Tracking</button>
+    </div>
+    <p class="small dim">Hold the phone like the prop, top edge pointing away from you, then tap Recentre. The 6-axis filter uses only the gyroscope and accelerometer, as the handheld would, so its heading slowly drifts. The phone's own fusion is steadier and shows what docking recalibration would have to correct.</p>
+  </section>
+
+  <section class="panel" id="p-collect" hidden>
+    <div class="card">
+      <h2>Who is holding it</h2>
+      <div class="grid3">
+        <label for="i-who">Participant<input type="text" id="i-who" value="P01" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
+        <label for="i-hand">Hand<select id="i-hand"><option>right</option><option>left</option></select></label>
+        <label for="i-posture">Posture<select id="i-posture"><option>standing</option><option>seated</option></select></label>
+      </div>
+      <p class="small dim">Use a code, not a name. The prop chosen on the Prop tab is saved with each clip.</p>
+    </div>
+    <div class="card">
+      <h2>Capture labelled clips</h2>
+      <div class="chips" id="classes" role="group" aria-label="Gesture"></div>
+      <div class="row">
+        <input type="text" id="i-class" placeholder="Add a gesture name" autocomplete="off" autocapitalize="off" spellcheck="false" style="flex:1 1 160px;width:auto">
+        <button class="btn ghost sm" id="b-addclass" style="flex:0 0 auto">Add</button>
+      </div>
+      <p id="cap-big">Pick a gesture, then start capturing.</p>
+      <canvas id="spark"></canvas>
+      <div class="row">
+        <button class="btn" id="b-cap" disabled>Start capturing</button>
+        <button class="btn ghost" id="b-undo" disabled>Discard last</button>
+      </div>
+      <p class="small dim" id="cap-help">The trace shows the last clip: amber is turn rate, green is acceleration. Each separate movement is cut out and saved as one clip, with a little lead-in. Pause for half a second between repetitions. Choose background to save a clip every 1.5 s of whatever is happening: sitting, walking, fidgeting, a bus ride.</p>
+    </div>
+    <div class="card">
+      <h2>Dataset on this phone</h2>
+      <div style="overflow-x:auto"><table id="ds-table"></table></div>
+      <div class="row">
+        <button class="btn ghost sm" id="b-json" disabled>Save JSON</button>
+        <button class="btn ghost sm" id="b-dcsv" disabled>Save CSV</button>
+        <button class="btn ghost sm" id="b-wipe" disabled>Delete all</button>
+      </div>
+      <p class="small dim" id="ds-msg">Clips stay in this browser until you delete them. JSON is for the Python training script, CSV for MATLAB.</p>
+    </div>
+    <div class="card">
+      <h2>Quick model</h2>
+      <p class="small dim">A nearest-neighbour classifier trained in the browser on your clips. It is a preview of what the data can do, not the final model. It needs two gestures with three clips each.</p>
+      <button class="btn ghost" id="b-train" disabled>Train on these clips</button>
+      <div class="kv" id="m-kv"></div>
+    </div>
+  </section>
+
+  <section class="panel" id="p-play" hidden>
     <canvas id="scene"></canvas>
     <div class="hud">
       <div><span>Score</span><b id="h-score">0</b></div>
       <div><span>Combo</span><b id="h-combo">0</b></div>
       <div><span>Time</span><b id="h-time">45</b></div>
     </div>
-    <div class="row">
-      <button class="btn" id="b-start">Start sensors</button>
-      <button class="btn ghost" id="b-round" disabled>Play a 45 s round</button>
-    </div>
+    <button class="btn ghost" id="b-round" disabled>Play a 45 s round</button>
     <div class="card" id="results" hidden>
       <h2>Round results</h2>
       <div class="kv" id="r-kv"></div>
       <div style="overflow-x:auto"><table id="r-table"></table></div>
-      <p class="small dim">Rows are what the game asked for. Columns are what the detector reported. The round is in the recording, so you can save it from the Record tab.</p>
+      <p class="small dim">Rows are what the game asked for. Columns are what the rule-based detector reported. The round is in the continuous recording on the Signals tab.</p>
     </div>
-    <div class="card">
-      <h2>How to hold it</h2>
-      <p class="small dim">Grip the phone like a handle, any way up. A <b class="tag-slide">slide</b> is a fast sideways sweep, as if cutting across a table top. A <b class="tag-chop">chop</b> is a fast downward strike from the elbow. The detector works out which way is down from gravity, so the grip does not matter. Keep a firm hold and clear space around you.</p>
-    </div>
+    <p class="small dim">A <b class="tag-slide">slide</b> is a fast sideways sweep. A <b class="tag-chop">chop</b> is a fast downward strike from the elbow. This game uses the rule-based detector, with thresholds on the Tune tab.</p>
   </section>
 
   <section class="panel" id="p-signals" hidden>
     <canvas id="plot"></canvas>
     <div class="legend" id="legend"></div>
-    <div class="row">
-      <button class="btn ghost" id="b-view">Show raw axes</button>
-    </div>
+    <button class="btn ghost sm" id="b-view">Show raw axes</button>
     <div class="card">
       <div class="kv">
         <span class="dim">Sample rate</span><span id="s-rate">0 Hz</span>
@@ -129,28 +199,25 @@ input[type=text]{background:var(--ink);border:1px solid var(--line);border-radiu
         <span class="dim">Vertical acceleration</span><span id="s-av">0.0 m/s²</span>
       </div>
     </div>
-  </section>
-
-  <section class="panel" id="p-record" hidden>
     <div class="card">
-      <h2>Record a labelled take</h2>
+      <h2>Continuous recording</h2>
       <label for="i-label">Label for this take
         <input type="text" id="i-label" value="mixed" autocomplete="off" autocapitalize="off" spellcheck="false">
       </label>
       <div class="row">
-        <button class="btn" id="b-rec" disabled>Record</button>
-        <button class="btn ghost" id="b-save" disabled>Save CSV</button>
-        <button class="btn ghost" id="b-clear" disabled>Clear</button>
+        <button class="btn sm" id="b-rec" disabled>Record</button>
+        <button class="btn ghost sm" id="b-save" disabled>Save CSV</button>
+        <button class="btn ghost sm" id="b-clear" disabled>Clear</button>
       </div>
       <div class="kv">
         <span class="dim">Rows</span><span id="rec-rows">0</span>
         <span class="dim">Length</span><span id="rec-len">0.0 s</span>
         <span class="dim">State</span><span id="rec-state">idle</span>
       </div>
-      <p class="small dim" id="rec-msg">Useful takes: 20 slides, 20 chops, sitting still, walking, a bumpy bus. Each row holds raw accelerometer and gyroscope values, the label, any game prompt and any detected gesture.</p>
+      <p class="small dim" id="rec-msg">One unbroken stream of every sample, for testing a detector against long stretches of real motion. Game prompts and rule detections are written into it.</p>
     </div>
     <div class="card">
-      <h2>Detected gestures</h2>
+      <h2>Rule detections</h2>
       <pre id="log">Nothing yet.</pre>
     </div>
   </section>
@@ -168,28 +235,42 @@ input[type=text]{background:var(--ink);border:1px solid var(--line);border-radiu
         <input type="range" id="t-acc" min="0" max="20" step="1"></label>
       <label for="t-peak"><span class="lv">Turn rate reached within 150 ms <b id="v-peak"></b></span>
         <input type="range" id="t-peak" min="120" max="600" step="10"></label>
-      <button class="btn ghost" id="b-reset">Reset to defaults</button>
+      <button class="btn ghost sm" id="b-reset">Reset to defaults</button>
     </div>
     <div class="card">
       <h2>Last movement the detector looked at</h2>
       <div class="kv" id="w-kv"><span class="dim">Move the phone to see one.</span><span></span></div>
     </div>
+    <div class="card">
+      <h2>If the prop tilts the wrong way</h2>
+      <p class="small dim">Phones disagree about the sign of the accelerometer. If the prop in the 6-axis filter mode keeps rolling over or hangs upside down, flip the sign.</p>
+      <button class="btn ghost sm" id="b-flip">Accelerometer sign: automatic</button>
+    </div>
   </section>
-
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
 const C = {slide:'#f2a93b', chop:'#4fd1b5', hold:'#8ea2ff', miss:'#ef5d74', text:'#ece7dc', dim:'#a2a3b8', line:'#34385a'};
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
+};
 const DEFAULTS = {start:120, sweep:30, dom:0.65, acc:4, peak:250};
-const P = Object.assign({}, DEFAULTS);
-try { Object.assign(P, JSON.parse(localStorage.getItem('gl-params') || '{}')); } catch (e) {}
+const P = Object.assign({}, DEFAULTS, store.get('gl-params', {}));
 
-/* ---------- vector helpers ---------- */
+/* ---------- vector and quaternion helpers (quaternions are [w,x,y,z]) ---------- */
 const dot = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
 const len = a => Math.hypot(a[0], a[1], a[2]);
+const qmul = (a, b) => [a[0]*b[0]-a[1]*b[1]-a[2]*b[2]-a[3]*b[3], a[0]*b[1]+a[1]*b[0]+a[2]*b[3]-a[3]*b[2],
+                        a[0]*b[2]-a[1]*b[3]+a[2]*b[0]+a[3]*b[1], a[0]*b[3]+a[1]*b[2]-a[2]*b[1]+a[3]*b[0]];
+const qnorm = q => { const n = Math.hypot(q[0], q[1], q[2], q[3]) || 1; return q.map(v => v / n); };
+const qrot = (q, v) => { const p = qmul(qmul(q, [0, v[0], v[1], v[2]]), [q[0], -q[1], -q[2], -q[3]]); return [p[1], p[2], p[3]]; };
+const qaxis = (ax, ang) => { const s = Math.sin(ang / 2); return [Math.cos(ang / 2), ax[0]*s, ax[1]*s, ax[2]*s]; };
+const D2R = Math.PI / 180;
 
 /* ---------- rule-based detector ----------
    Works on gravity-referenced features so grip does not matter:
@@ -216,7 +297,7 @@ class Detector {
     this.yawInt += s.yaw * dt;
     for (let i = 0; i < 3; i++) this.tv[i] += s.wh[i] * dt;
     this.pAH = Math.max(this.pAH, s.aH); this.pAV = Math.max(this.pAV, Math.abs(s.aV)); this.pW = Math.max(this.pW, wm);
-    const dur = s.t - this.t0; if (dur <= 150) this.pFast = Math.max(this.pFast, wm);   // fast onset: peak reached soon after motion starts
+    const dur = s.t - this.t0; if (dur <= 150) this.pFast = Math.max(this.pFast, wm);
     const ys = Math.abs(this.yawInt), ts = len(this.tv), tot = ys + ts || 1e-9;
     const feat = () => ({t: s.t, dur, yawSweep: this.yawInt, tiltSweep: ts, yawShare: ys / tot, peakAH: this.pAH, peakAV: this.pAV, peakW: this.pW, peakFast: this.pFast});
     let out = null;
@@ -236,18 +317,48 @@ class Detector {
 }
 const det = new Detector(P);
 
+/* ---------- orientation: 6-axis complementary filter (gyro integration, gravity correction) ----------
+   q rotates device axes (x right, y to the top edge, z out of the screen) into a world frame with z up.
+   Heading is not observable without a magnetometer, so it drifts; Recentre zeroes it. */
+let qFilt = [1, 0, 0, 0], qOS = null, qYaw = [1, 0, 0, 0], needCentre = true;
+let trackMode = store.get('gl-mode', 'os');   // 'os' falls back to the filter until the phone reports a fused orientation
+function fuse(w, up, dt) {
+  let wx = w[0] * D2R, wy = w[1] * D2R, wz = w[2] * D2R;
+  const n = len(up);
+  if (n > 6 && n < 14) {
+    const q = qFilt, u = [up[0] / n, up[1] / n, up[2] / n];
+    const v = [2 * (q[1]*q[3] - q[0]*q[2]), 2 * (q[0]*q[1] + q[2]*q[3]), q[0]*q[0] - q[1]*q[1] - q[2]*q[2] + q[3]*q[3]];
+    const K = 2.0;
+    wx += K * (u[1]*v[2] - u[2]*v[1]); wy += K * (u[2]*v[0] - u[0]*v[2]); wz += K * (u[0]*v[1] - u[1]*v[0]);
+  }
+  const d = qmul(qFilt, [0, wx, wy, wz]);
+  qFilt = qnorm(qFilt.map((v, i) => v + 0.5 * d[i] * dt));
+}
+const qRaw = () => (trackMode === 'os' && qOS) ? qOS : qFilt;
+function recentre() {
+  const q = qRaw(); let f = qrot(q, [0, 1, 0]);
+  if (Math.hypot(f[0], f[1]) < 0.3) f = qrot(q, [0, 0, -1]);        // phone upright: use the back of the phone
+  qYaw = qaxis([0, 0, 1], -Math.atan2(-f[0], f[1])); needCentre = false;
+}
+const qShow = () => qmul(qYaw, qRaw());
+function onOrient(e) {
+  if (e.alpha == null || e.beta == null) return;
+  if (!qOS) needCentre = true;
+  qOS = qmul(qmul(qaxis([0, 0, 1], e.alpha * D2R), qaxis([1, 0, 0], e.beta * D2R)), qaxis([0, 1, 0], (e.gamma || 0) * D2R));
+}
+
 /* ---------- sample pipeline ---------- */
 const BUF_MS = 5000;
-const buf = [];           // recent samples for the plot
-let rec = [];             // recorded rows
+const buf = [];           // recent samples, for the plot and for cutting clips
+let rec = [];             // continuous recording rows
 let recording = false, recStart = 0;
-let prompt = '';          // current game prompt, written into the recording
+let prompt = '';
 let gHat = [0, 0, 1], gLP = null;
 let rateDt = 16.7, lastT = 0, lastS = null;
 const events = [];
 
 function ingest(t, a, aig, w, hasLinear) {
-  if (!hasLinear) {                       // no linear acceleration from the device: low-pass gravity ourselves
+  if (!hasLinear) {
     gLP = gLP ? gLP.map((v, i) => 0.92 * v + 0.08 * aig[i]) : aig.slice();
     a = aig.map((v, i) => v - gLP[i]);
   }
@@ -256,23 +367,31 @@ function ingest(t, a, aig, w, hasLinear) {
   const yaw = dot(w, gHat), wh = w.map((v, i) => v - yaw * gHat[i]);
   const aV = dot(a, gHat), aH = len(a.map((v, i) => v - aV * gHat[i]));
   const s = {t, a, aig, w, yaw, wh, tilt: len(wh), aH, aV, ev: ''};
+  const dt = lastT ? Math.min(0.1, (t - lastT) / 1000) : 0.016;
   if (lastT) rateDt = 0.95 * rateDt + 0.05 * (t - lastT); lastT = t; lastS = s;
+  fuse(w, aig, dt);
+  if (needCentre && buf.length > 20) recentre();
   const ev = det.push(s);
   if (ev && ev.type !== 'none') s.ev = ev.type;
   buf.push(s); while (buf.length && buf[0].t < t - BUF_MS) buf.shift();
   if (recording && rec.length < 400000) rec.push([t - recStart, a, aig, w, yaw, s.tilt, aH, aV, $('i-label').value.trim(), prompt, s.ev]);
+  segment(s);
+  if (cap.on && cap.label === 'background' && t - cap.lastBg >= 1500) { cap.lastBg = t; addClip(cut(t - 1500, t), 'background'); }
   if (ev) onDetector(ev);
 }
 
 /* ---------- real sensor ---------- */
 let running = false, gotSensor = false, simOn = false;
+const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+let flip = store.get('gl-flip', 0);     // 0 automatic, 1 as reported, -1 negated
+const accSign = () => flip || (IOS ? -1 : 1);   // iOS reports acceleration with the opposite sign to the W3C convention
 function onMotion(e) {
   const r = e.rotationRate, ag = e.accelerationIncludingGravity, al = e.acceleration;
   if (!r || r.alpha == null || !ag || ag.x == null) return;
-  if (!gotSensor) { gotSensor = true; stopSim(); notice(''); setStatus(); }
-  const hasLinear = !!(al && al.x != null);
+  if (!gotSensor) { gotSensor = true; stopSim(); notice(''); needCentre = true; setStatus(); }
+  const hasLinear = !!(al && al.x != null), k = accSign();
   // rotationRate: beta is about x, gamma about y, alpha about z (deg/s)
-  ingest(performance.now(), hasLinear ? [al.x, al.y, al.z] : null, [ag.x, ag.y, ag.z], [r.beta || 0, r.gamma || 0, r.alpha || 0], hasLinear);
+  ingest(performance.now(), hasLinear ? [k * al.x, k * al.y, k * al.z] : null, [k * ag.x, k * ag.y, k * ag.z], [r.beta || 0, r.gamma || 0, r.alpha || 0], hasLinear);
 }
 
 /* ---------- simulated input: a drag pad that produces fake IMU samples ---------- */
@@ -286,8 +405,11 @@ function startSim() {
     if (down && pp && prevPos) v = [(pp[0] - prevPos[0]) / dt, (pp[1] - prevPos[1]) / dt];
     prevPos = pp ? pp.slice() : null;
     const acc = [(v[0] - pv[0]) / dt * 0.001, (v[1] - pv[1]) / dt * 0.001]; pv = v;
-    const a = [acc[0], 0, acc[1]];
-    ingest(now, a, [a[0], a[1], a[2] + 9.81], [v[1] * 0.5, 0, v[0] * 0.5], true);
+    // sideways drag turns the prop about its vertical axis, downward drag pitches the tip down
+    const wLocal = [-v[1] * 0.5, 0, -v[0] * 0.5], up = qrot([qFilt[0], -qFilt[1], -qFilt[2], -qFilt[3]], [0, 0, 1]);
+    const a = [acc[0], 0, 0].map((x, i) => x + up[i] * acc[1]);
+    const w = [wLocal[0] + up[0] * wLocal[2], up[1] * wLocal[2], up[2] * wLocal[2]];
+    ingest(now, a, a.map((x, i) => x + up[i] * 9.81), w, true);
   }, 16);
 }
 function stopSim() { if (!simOn) return; simOn = false; clearInterval(simTimer); $('pad').hidden = true; }
@@ -305,26 +427,26 @@ function setStatus() {
   else { el.dataset.state = 'off'; el.textContent = 'looking for sensor'; }
 }
 function notice(msg) { const n = $('notice'); n.textContent = msg; n.hidden = !msg; }
-async function start() {
+function start() {
   if (running) return;
-  running = true; initAudio(); setStatus();
-  $('b-start').disabled = true; $('b-start').textContent = 'Sensors running';
-  let granted = true;
-  try {
-    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function')
-      granted = (await DeviceMotionEvent.requestPermission()) === 'granted';
-  } catch (e) { granted = false; }
-  window.addEventListener('devicemotion', onMotion);   // harmless if access was refused: no events arrive
+  running = true; initAudio(); setStatus(); $('b-start').hidden = true;
+  let asked = Promise.resolve('granted');
+  try {   // both permission calls are made inside the tap, before anything is awaited
+    const ask = E => (typeof E !== 'undefined' && typeof E.requestPermission === 'function') ? E.requestPermission() : 'granted';
+    asked = Promise.all([ask(window.DeviceMotionEvent), ask(window.DeviceOrientationEvent)]).then(r => r[0]);
+  } catch (e) {}
+  window.addEventListener('devicemotion', onMotion);
+  window.addEventListener('deviceorientation', onOrient);
   try { if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(() => {}); } catch (e) {}
-  ['b-round', 'b-rec'].forEach(id => { $(id).disabled = false; });
-  setTimeout(() => {
+  ['b-round', 'b-rec', 'b-cap'].forEach(id => { $(id).disabled = false; });
+  asked.catch(() => 'denied').then(res => setTimeout(() => {
     if (gotSensor) return;
     startSim();
     notice(window.claude
-      ? 'This page cannot read motion sensors when it is opened inside Claude. It is running on simulated motion from the drag pad. Open the hosted copy of the same file in your phone browser for real sensor data.'
-      : granted ? 'No motion sensor found on this device, so the drag pad below stands in for one.'
-                : 'Motion access was not allowed, so the drag pad below stands in for the sensor. Reload the page to be asked again.');
-  }, 1200);
+      ? 'This page cannot read motion sensors when it is opened inside Claude, so the drag pad stands in for the phone. Open the hosted copy in your phone browser for real sensor data.'
+      : res === 'granted' ? 'No motion sensor found on this device, so the drag pad stands in for one.'
+                          : 'Motion access was not allowed, so the drag pad stands in for the sensor. Reload the page to be asked again.');
+  }, 1200));
 }
 $('b-start').addEventListener('click', start);
 
@@ -357,8 +479,254 @@ const fb = {
   chop() { tone('sine', 190, 45, 0.18, 0.7); whoosh(1800, 300, 0.09, 0.35); buzz([20, 25, 45]); },
   hit() { tone('triangle', 660, 1100, 0.16, 0.25); },
   miss() { tone('square', 120, 80, 0.22, 0.12); buzz(160); },
-  held() { tone('sine', 520, 520, 0.12, 0.15); }
+  held() { tone('sine', 520, 520, 0.12, 0.15); },
+  clip() { tone('triangle', 880, 1320, 0.09, 0.2); buzz(25); }
 };
+
+/* ---------- 3D prop view ---------- */
+const view = {ok: false};
+let prop = store.get('gl-prop', 'wand');
+const TIP = {wand: 0.95, blaster: 0.78, katana: 1.25, shuriken: 0.36};
+function initView() {
+  if (typeof THREE === 'undefined') throw new Error('three.js not loaded');
+  const cv = $('view'), T = THREE;
+  const r = new T.WebGLRenderer({canvas: cv, antialias: true});
+  r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  const scene = new T.Scene(); scene.background = new T.Color(0x0b0c14); scene.fog = new T.Fog(0x0b0c14, 3.5, 8.5);
+  const cam = new T.PerspectiveCamera(40, 1, 0.1, 30); cam.position.set(0.95, 1.0, 2.0); cam.lookAt(0, 0.12, -0.42);
+  scene.add(new T.HemisphereLight(0xdfe3ff, 0x2a2233, 1.15));
+  const sun = new T.DirectionalLight(0xfff0d8, 1.1); sun.position.set(1.5, 3, 2); scene.add(sun);
+  const fill = new T.DirectionalLight(0x8ea2ff, 0.6); fill.position.set(-2, 1, 1.5); scene.add(fill);
+  const floor = new T.Group(); floor.rotation.x = -Math.PI / 2; floor.position.y = -0.62; scene.add(floor);   // target rings on the ground
+  floor.add(new T.Mesh(new T.CircleGeometry(3.2, 64), new T.MeshBasicMaterial({color: 0x141627})));
+  [0.6, 1.2, 1.8, 2.4].forEach(rad => { const ring = new T.Mesh(new T.RingGeometry(rad - 0.012, rad + 0.012, 96), new T.MeshBasicMaterial({color: 0x3d4270})); ring.position.z = 0.002; floor.add(ring); });
+  for (let i = 0; i < 12; i++) { const tick = new T.Mesh(new T.PlaneGeometry(0.02, i % 3 ? 0.25 : 0.6), new T.MeshBasicMaterial({color: i ? 0x3d4270 : 0xf2a93b})); const a = i * Math.PI / 6; tick.position.set(-Math.sin(a) * 2.4, Math.cos(a) * 2.4, 0.003); tick.rotation.z = a; floor.add(tick); }
+  const frame = new T.Group(); frame.rotation.x = -Math.PI / 2; scene.add(frame);   // world z-up to three.js y-up
+  const pivot = new T.Group(); pivot.scale.setScalar(1.25); frame.add(pivot);
+  const M = (c, o) => { const m = Object.assign({color: c, roughness: 0.5, metalness: 0.2}, o || {}); m.metalness = Math.min(m.metalness, 0.35); return new T.MeshStandardMaterial(m); };   // no environment map, so keep metalness low
+  const glow = c => new T.MeshStandardMaterial({color: c, emissive: c, emissiveIntensity: 1.2, roughness: 0.3});
+  const mesh = (g, m, x, y, z) => { const o = new T.Mesh(g, m); o.position.set(x || 0, y || 0, z || 0); return o; };
+  const models = {};
+  // All props are built in device axes: tip along +y (top edge of the phone), +z out of the screen.
+  { const g = new T.Group();   // wand
+    g.add(mesh(new T.CylinderGeometry(0.016, 0.034, 0.85, 16), M(0x8a5a33, {roughness: 0.7}), 0, 0.5, 0));
+    g.add(mesh(new T.CylinderGeometry(0.04, 0.046, 0.3, 16), M(0x4a2f1c, {roughness: 0.8}), 0, -0.07, 0));
+    g.add(mesh(new T.TorusGeometry(0.043, 0.008, 8, 20), M(0xc9a24a, {metalness: 0.8, roughness: 0.3}), 0, 0.08, 0).rotateX(Math.PI / 2));
+    g.add(mesh(new T.SphereGeometry(0.035, 16, 12), glow(0xf2a93b), 0, 0.95, 0)); models.wand = g; }
+  { const g = new T.Group();   // blaster
+    g.add(mesh(new T.BoxGeometry(0.12, 0.55, 0.15), M(0x5562a8, {metalness: 0.5}), 0, 0.2, 0));
+    g.add(mesh(new T.CylinderGeometry(0.04, 0.05, 0.36, 16), M(0x8b93c4, {metalness: 0.7, roughness: 0.3}), 0, 0.6, 0.01));
+    g.add(mesh(new T.TorusGeometry(0.05, 0.012, 8, 20), glow(0x4fd1b5), 0, 0.78, 0.01).rotateX(Math.PI / 2));
+    g.add(mesh(new T.BoxGeometry(0.09, 0.14, 0.3), M(0x2d3357, {roughness: 0.8}), 0, -0.02, -0.2).rotateX(-0.3));
+    g.add(mesh(new T.BoxGeometry(0.03, 0.4, 0.035), glow(0x4fd1b5), 0, 0.2, 0.085));
+    g.add(mesh(new T.BoxGeometry(0.14, 0.1, 0.06), M(0x8b93c4, {metalness: 0.7}), 0, 0.42, 0.1)); models.blaster = g; }
+  { const g = new T.Group();   // katana
+    g.add(mesh(new T.CylinderGeometry(0.026, 0.028, 0.36, 12), M(0x3a3a55, {roughness: 0.9}), 0, -0.05, 0));
+    g.add(mesh(new T.CylinderGeometry(0.085, 0.085, 0.018, 24), M(0xc9a24a, {metalness: 0.8, roughness: 0.3}), 0, 0.15, 0));
+    g.add(mesh(new T.BoxGeometry(0.012, 1.05, 0.055), M(0xdfe6f2, {metalness: 0.9, roughness: 0.18}), 0, 0.69, 0));
+    g.add(mesh(new T.BoxGeometry(0.014, 1.05, 0.008), glow(0xf2a93b), 0, 0.69, -0.03)); models.katana = g; }
+  { const g = new T.Group(), sh = new T.Shape(), n = 4;   // shuriken, flat like the phone
+    for (let i = 0; i < n * 2; i++) { const a = i * Math.PI / n + Math.PI / 2, rr = i % 2 ? 0.11 : 0.36; sh[i ? 'lineTo' : 'moveTo'](Math.cos(a) * rr, Math.sin(a) * rr); }
+    sh.closePath(); const hole = new T.Path(); hole.absarc(0, 0, 0.045, 0, Math.PI * 2, true); sh.holes.push(hole);
+    g.add(mesh(new T.ExtrudeGeometry(sh, {depth: 0.022, bevelEnabled: true, bevelSize: 0.012, bevelThickness: 0.01, bevelSegments: 2}), M(0xaab2c8, {metalness: 0.9, roughness: 0.25}), 0, 0, -0.011));
+    g.add(mesh(new T.TorusGeometry(0.06, 0.01, 8, 24), glow(0xef5d74))); models.shuriken = g; }
+  Object.keys(models).forEach(k => { models[k].visible = false; pivot.add(models[k]); });
+  const tipLight = new T.PointLight(0xf2a93b, 0.8, 3); pivot.add(tipLight);
+  const N = 36, pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
+  const tg = new T.BufferGeometry(); tg.setAttribute('position', new T.BufferAttribute(pos, 3)); tg.setAttribute('color', new T.BufferAttribute(col, 3));
+  const trail = new T.Line(tg, new T.LineBasicMaterial({vertexColors: true})); trail.frustumCulled = false; scene.add(trail);
+  Object.assign(view, {ok: true, r, scene, cam, pivot, models, tipLight, trail, pos, col, N, primed: false, tint: new T.Color(C.slide), tintUntil: 0, tmp: new T.Vector3()});
+  setProp(prop);
+}
+function setProp(name) {
+  prop = TIP[name] ? name : 'wand'; store.set('gl-prop', prop);
+  document.querySelectorAll('#props .chip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.prop === prop)));
+  if (!view.ok) return;
+  Object.keys(view.models).forEach(k => { view.models[k].visible = k === prop; });
+  view.tipLight.position.set(0, TIP[prop], 0); view.primed = false;
+}
+document.querySelectorAll('#props .chip').forEach(b => b.addEventListener('click', () => setProp(b.dataset.prop)));
+function drawView(now) {
+  if (!view.ok) return;
+  const cv = $('view'), w = cv.clientWidth, h = cv.clientHeight;
+  if (view.w !== w || view.h !== h) { view.w = w; view.h = h; view.r.setSize(w, h, false); view.cam.aspect = w / h; view.cam.updateProjectionMatrix(); }
+  const q = qShow(); view.pivot.quaternion.set(q[1], q[2], q[3], q[0]);
+  view.pivot.updateWorldMatrix(true, false);
+  const tip = view.tmp.set(0, TIP[prop], 0); view.pivot.localToWorld(tip);
+  const {pos, col, N} = view;
+  if (!view.primed) { for (let i = 0; i < N; i++) pos.set([tip.x, tip.y, tip.z], i * 3); view.primed = true; }
+  pos.copyWithin(3, 0, (N - 1) * 3); pos.set([tip.x, tip.y, tip.z], 0);
+  const hot = now < view.tintUntil, base = hot ? view.tint : {r: 0.56, g: 0.64, b: 1};
+  for (let i = 0; i < N; i++) { const k = Math.pow(1 - i / N, 1.6); col[i*3] = base.r * k; col[i*3+1] = base.g * k; col[i*3+2] = base.b * k; }
+  view.trail.geometry.attributes.position.needsUpdate = true; view.trail.geometry.attributes.color.needsUpdate = true;
+  view.tipLight.intensity = hot ? 2.5 : 0.8;
+  view.r.render(view.scene, view.cam);
+}
+let flashTimer = 0;
+function flash(text, color) {
+  const f = $('flash'); f.textContent = text.toUpperCase(); f.style.color = color; f.classList.add('on');
+  clearTimeout(flashTimer); flashTimer = setTimeout(() => f.classList.remove('on'), 350);
+  if (view.ok) { view.tint.set(color); view.tintUntil = performance.now() + 500; }
+}
+$('b-centre').addEventListener('click', recentre);
+let modeMsgUntil = 0;
+function modeLabel() {
+  if (performance.now() < modeMsgUntil) return;
+  $('b-mode').textContent = (trackMode === 'os' && qOS) ? "Tracking: phone's own fusion" : 'Tracking: 6-axis filter';
+}
+function setMode(m) { trackMode = m; store.set('gl-mode', m); needCentre = true; modeLabel(); }
+$('b-mode').addEventListener('click', () => {
+  if (!qOS) { $('b-mode').textContent = 'No fused orientation on this device'; modeMsgUntil = performance.now() + 1800; return; }
+  setMode(trackMode === 'os' ? 'filter' : 'os');
+});
+function setFlip() { $('b-flip').textContent = 'Accelerometer sign: ' + (flip === 0 ? 'automatic' : flip === 1 ? 'as reported' : 'negated'); }
+$('b-flip').addEventListener('click', () => { flip = flip === 0 ? 1 : flip === 1 ? -1 : 0; store.set('gl-flip', flip); qFilt = [1, 0, 0, 0]; needCentre = true; setFlip(); });
+
+/* ---------- clip capture for a labelled dataset ---------- */
+const BASE_CLASSES = ['slide', 'chop', 'shake', 'hammer', 'circle', 'flick', 'twist', 'throw', 'background'];
+const ds = store.get('gl-dataset', null) || {classes: BASE_CLASSES.slice(), clips: []};
+const cap = {on: false, label: 'slide', run: 0, lastBg: 0};
+const seg = {on: false, t0: 0, quiet: 0};
+const r2 = v => Math.round(v * 100) / 100;
+function cut(ta, tb) {          // rows: [t_ms, acc xyz, accg xyz, rot xyz]
+  const rows = []; let t0 = null;
+  for (const s of buf) if (s.t >= ta && s.t <= tb) { if (t0 == null) t0 = s.t; rows.push([Math.round(s.t - t0), ...s.a.map(r2), ...s.aig.map(r2), ...s.w.map(r2)]); }
+  return rows;
+}
+function segment(s) {           // cuts each separate movement out of the stream
+  const wm = len(s.w), am = len(s.a), moving = wm > P.start * 0.5 || am > 3;
+  if (!seg.on) { if (wm > P.start || am > 5) { seg.on = true; seg.t0 = s.t; seg.quiet = 0; } return; }
+  if (moving) seg.quiet = 0; else if (!seg.quiet) seg.quiet = s.t;
+  if ((seg.quiet && s.t - seg.quiet >= 200) || s.t - seg.t0 > 3000) {
+    seg.on = false;
+    if ((seg.quiet || s.t) - seg.t0 >= 100) onSegment(cut(seg.t0 - 200, s.t));
+  }
+}
+function onSegment(rows) {
+  if (rows.length < 8) return;
+  if (cap.on && cap.label !== 'background') addClip(rows, cap.label);
+  else if (model) { const g = predict(features(rows)); showGuess(g); }
+}
+let saveTimer = 0;
+function persist() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => { if (!store.set('gl-dataset', ds)) $('ds-msg').textContent = 'This browser is out of storage space. Save the dataset now, then delete all to carry on.'; }, 800);
+}
+function addClip(rows, label) {
+  if (rows.length < 8) return;
+  ds.clips.push({id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), label,
+    participant: $('i-who').value.trim() || 'P00', hand: $('i-hand').value, posture: $('i-posture').value, prop,
+    source: gotSensor ? 'imu' : 'sim', time: new Date().toISOString(), rate_hz: Math.round(1000 / rateDt), samples: rows});
+  cap.run++; model = null; persist(); renderDs(); renderCap(); spark(rows); fb.clip();
+}
+function renderCap() {
+  const big = $('cap-big');
+  if (!cap.on) big.textContent = 'Pick a gesture, then start capturing.';
+  else if (cap.label === 'background') big.innerHTML = 'Saving <b>background</b> every 1.5 s. ' + cap.run + ' saved.';
+  else big.innerHTML = 'Do a <b>' + cap.label + '</b>, pause, repeat. ' + cap.run + ' saved.';
+  $('b-cap').textContent = cap.on ? 'Stop capturing' : 'Start capturing';
+  $('b-undo').disabled = !ds.clips.length;
+}
+function renderClasses() {
+  const box = $('classes'); box.innerHTML = '';
+  ds.classes.forEach(c => { const b = document.createElement('button'); b.className = 'chip'; b.textContent = c; b.setAttribute('aria-pressed', String(c === cap.label));
+    b.addEventListener('click', () => { cap.label = c; cap.run = 0; cap.lastBg = performance.now(); renderClasses(); renderCap(); }); box.appendChild(b); });
+}
+function renderDs() {
+  const n = {}; ds.clips.forEach(c => { n[c.label] = (n[c.label] || 0) + 1; });
+  const who = new Set(ds.clips.map(c => c.participant));
+  let h = '<tr><th>Gesture</th><th>Clips</th></tr>';
+  ds.classes.filter(c => n[c]).forEach(c => { h += '<tr><td>' + c + '</td><td>' + n[c] + '</td></tr>'; });
+  h += '<tr><td>Total, ' + who.size + (who.size === 1 ? ' participant' : ' participants') + '</td><td>' + ds.clips.length + '</td></tr>';
+  $('ds-table').innerHTML = h;
+  ['b-json', 'b-dcsv', 'b-wipe'].forEach(id => { $(id).disabled = !ds.clips.length; });
+  $('b-train').disabled = Object.values(n).filter(v => v >= 3).length < 2;
+  if (!model) $('m-kv').innerHTML = '';
+}
+function spark(rows) {
+  const [ctx, w, h] = fit($('spark')); ctx.clearRect(0, 0, w, h);
+  if (!rows) return;
+  const T = rows[rows.length - 1][0] || 1; let mx = 100, ma = 5;
+  rows.forEach(r => { mx = Math.max(mx, Math.hypot(r[7], r[8], r[9])); ma = Math.max(ma, Math.hypot(r[1], r[2], r[3])); });
+  [[r => Math.hypot(r[7], r[8], r[9]) / mx, C.slide], [r => Math.hypot(r[1], r[2], r[3]) / ma, C.chop]].forEach(([f, c]) => {
+    ctx.strokeStyle = c; ctx.lineWidth = 1.6; ctx.beginPath();
+    rows.forEach((r, i) => { const x = 6 + r[0] / T * (w - 12), y = h - 6 - f(r) * (h - 14); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }); ctx.stroke();
+  });
+  ctx.fillStyle = C.dim; ctx.font = '11px "IBM Plex Mono",monospace'; ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+  ctx.fillText('last clip ' + T + ' ms, ' + rows.length + ' samples', 8, 4);
+}
+$('b-cap').addEventListener('click', () => { cap.on = !cap.on; cap.run = 0; cap.lastBg = performance.now(); renderCap(); });
+$('b-undo').addEventListener('click', () => { if (ds.clips.pop()) { cap.run = Math.max(0, cap.run - 1); model = null; persist(); renderDs(); renderCap(); spark(null); } });
+$('b-addclass').addEventListener('click', () => {
+  const v = $('i-class').value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+  if (v && !ds.classes.includes(v)) { ds.classes.splice(ds.classes.length - 1, 0, v); persist(); }
+  if (v) { cap.label = v; cap.run = 0; $('i-class').value = ''; renderClasses(); renderCap(); }
+});
+let wipeArmed = 0;
+$('b-wipe').addEventListener('click', () => {
+  if (Date.now() - wipeArmed > 4000) { wipeArmed = Date.now(); $('b-wipe').textContent = 'Tap again to delete'; setTimeout(() => { $('b-wipe').textContent = 'Delete all'; }, 4000); return; }
+  ds.clips = []; model = null; wipeArmed = 0; $('b-wipe').textContent = 'Delete all'; persist(); renderDs(); renderCap(); spark(null);
+});
+const CLIP_COLS = 'clip_id,label,participant,hand,posture,prop,source,t_ms,acc_x,acc_y,acc_z,accg_x,accg_y,accg_z,rot_x,rot_y,rot_z';
+function datasetCsv() {
+  const out = [CLIP_COLS];
+  ds.clips.forEach(c => { const head = [c.id, c.label, c.participant, c.hand, c.posture, c.prop, c.source].join(','); c.samples.forEach(r => out.push(head + ',' + r.join(','))); });
+  return out.join('\n') + '\n';
+}
+function datasetJson() {
+  return JSON.stringify({format: 'gesture-lab-clips', version: 1, exported: new Date().toISOString(),
+    columns: ['t_ms', 'acc_x', 'acc_y', 'acc_z', 'accg_x', 'accg_y', 'accg_z', 'rot_x', 'rot_y', 'rot_z'],
+    units: {acc: 'm/s^2, gravity removed', accg: 'm/s^2, including gravity', rot: 'deg/s about device x, y, z'}, clips: ds.clips});
+}
+
+/* ---------- quick nearest-neighbour model ---------- */
+let model = null;
+function features(rows) {
+  // Grip-independent channels (turn rate about vertical, about horizontal, sideways and vertical
+  // acceleration, total turn rate). Summary statistics do not depend on timing or phase, which
+  // matters for repeating gestures like a shake; a coarse 6-step profile keeps the overall shape.
+  const n = rows.length; let g = [0, 0, 1];
+  const ch = rows.map(r => {
+    const a = [r[1], r[2], r[3]], w = [r[7], r[8], r[9]], gv = [r[4] - r[1], r[5] - r[2], r[6] - r[3]], gl = len(gv);
+    if (gl > 1) g = gv.map(v => v / gl);
+    const yaw = dot(w, g), tilt = len(w.map((v, i) => v - yaw * g[i])), aV = dot(a, g), aH = len(a.map((v, i) => v - aV * g[i]));
+    return [yaw / 300, tilt / 300, aH / 10, aV / 10, len(w) / 300];
+  });
+  const f = [];
+  for (let c = 0; c < 5; c++) {
+    let m = 0, mn = Infinity, mx = -Infinity, zc = 0;
+    for (let i = 0; i < n; i++) { const v = ch[i][c]; m += v; mn = Math.min(mn, v); mx = Math.max(mx, v); if (i && Math.abs(v) > 0.15 && v * ch[i - 1][c] < 0) zc++; }
+    m /= n; let sd = 0; for (let i = 0; i < n; i++) sd += (ch[i][c] - m) ** 2;
+    f.push(m, Math.sqrt(sd / n), mn, mx, zc / 4);
+    for (let k = 0; k < 6; k++) { let e = 0, cnt = 0; for (let i = Math.floor(k * n / 6); i < Math.floor((k + 1) * n / 6); i++) { e += Math.abs(ch[i][c]); cnt++; } f.push(0.5 * e / (cnt || 1)); }
+  }
+  f.push(Math.log((rows[n - 1][0] || 1) / 500));
+  return f;
+}
+function predict(f, skip) {
+  const d = [];
+  model.X.forEach((x, i) => { if (i === skip) return; let s = 0; for (let j = 0; j < x.length; j++) { const e = x[j] - f[j]; s += e * e; } d.push([s, model.y[i]]); });
+  d.sort((a, b) => a[0] - b[0]); const top = d.slice(0, 3), votes = {};
+  top.forEach(([s, y]) => { votes[y] = (votes[y] || 0) + 1 / (1e-6 + s); });
+  const tot = Object.values(votes).reduce((a, b) => a + b, 0), best = Object.keys(votes).sort((a, b) => votes[b] - votes[a])[0];
+  return {label: best, conf: votes[best] / tot};
+}
+function train() {
+  model = {X: ds.clips.map(c => features(c.samples)), y: ds.clips.map(c => c.label)};
+  let ok = 0; const per = {};
+  model.X.forEach((x, i) => { const g = predict(x, i), y = model.y[i]; per[y] = per[y] || [0, 0]; per[y][1]++; if (g.label === y) { ok++; per[y][0]++; } });
+  const kv = $('m-kv'); kv.innerHTML = '';
+  const add = (k, v) => { const a = document.createElement('span'), b = document.createElement('span'); a.className = 'dim'; a.textContent = k; b.textContent = v; kv.append(a, b); };
+  add('Clips used', model.X.length);
+  add('Leave-one-out accuracy', Math.round(100 * ok / model.X.length) + '%');
+  Object.keys(per).forEach(k => add(k, per[k][0] + ' of ' + per[k][1]));
+  add('Live guesses', 'on, shown on the Prop tab');
+}
+$('b-train').addEventListener('click', train);
+function showGuess(g) {
+  $('guess').textContent = 'model: ' + g.label + ' ' + Math.round(g.conf * 100) + '%';
+  if (g.label !== 'background') flash(g.label, C.hold);
+}
 
 /* ---------- game ---------- */
 const ROUND_MS = 45000;
@@ -402,7 +770,7 @@ function showResults() {
   const kinds = ['slide', 'chop', 'hold'], cols = ['slide', 'chop', 'none'];
   const m = {}; kinds.forEach(k => { m[k] = {slide: 0, chop: 0, none: 0}; });
   game.trials.forEach(t => { m[t.prompt][t.detected]++; });
-  const ok = game.trials.filter(t => t.ok), gest = game.trials.filter(t => t.prompt !== 'hold');
+  const gest = game.trials.filter(t => t.prompt !== 'hold');
   const gestOk = gest.filter(t => t.ok), holds = game.trials.filter(t => t.prompt === 'hold');
   const pct = (a, b) => b ? Math.round(100 * a / b) + '%' : 'n/a';
   const rt = gestOk.length ? Math.round(gestOk.reduce((s, t) => s + t.rt, 0) / gestOk.length) + ' ms' : 'n/a';
@@ -416,7 +784,7 @@ function showResults() {
   });
   let h = '<tr><th>Asked</th>' + cols.map(c => '<th>' + c + '</th>').join('') + '</tr>';
   kinds.forEach(k => { h += '<tr><td>' + k + '</td>' + cols.map(c => '<td>' + m[k][c] + '</td>').join('') + '</tr>'; });
-  $('r-table').innerHTML = h; $('results').hidden = false; void ok;
+  $('r-table').innerHTML = h; $('results').hidden = false;
 }
 $('b-round').addEventListener('click', startRound);
 
@@ -425,7 +793,8 @@ function onDetector(ev) {
   showWindow(ev);
   if (ev.type === 'none') return;
   events.unshift(ev); if (events.length > 40) events.pop(); renderLog();
-  fb[ev.type]();
+  if (!cap.on) fb[ev.type]();
+  if (!model) flash(ev.type, C[ev.type]);
   if (game.on && game.cur) {
     const c = game.cur;
     if (c.kind === 'hold') resolve(false, ev.type, now); else resolve(ev.type === c.kind, ev.type, now);
@@ -435,7 +804,7 @@ function onDetector(ev) {
   }
 }
 
-/* ---------- scene drawing ---------- */
+/* ---------- game scene drawing ---------- */
 const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const motes = Array.from({length: 14}, () => ({x: Math.random(), y: Math.random(), v: 0.004 + Math.random() * 0.012, r: 1 + Math.random() * 2.5}));
 function fit(cv) {
@@ -536,10 +905,10 @@ function drawPlot(now) {
     ctx.beginPath(); ctx.moveTo(px, 18); ctx.lineTo(px, h); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = C[s.ev]; ctx.textAlign = 'center'; ctx.fillText(s.ev, Math.min(w - 20, Math.max(20, px)), h - 14);
   }
-  if (!buf.length) { ctx.fillStyle = C.dim; ctx.textAlign = 'center'; ctx.fillText('Start the sensors on the Play tab to see signals', w / 2, h / 2 - 6); }
+  if (!buf.length) { ctx.fillStyle = C.dim; ctx.textAlign = 'center'; ctx.fillText('Start the sensors to see signals', w / 2, h / 2 - 6); }
 }
 
-/* ---------- recording and CSV ---------- */
+/* ---------- continuous recording and file saving ---------- */
 function setRecording(on) {
   if (on === recording) return;
   recording = on;
@@ -561,13 +930,8 @@ function csv() {
   for (const r of rec) lines.push([r[0].toFixed(1), ...r[1].map(f), ...r[2].map(f), ...r[3].map(f), f(r[4]), f(r[5]), f(r[6]), f(r[7]), q(r[8]), r[9], r[10]].join(','));
   return lines.join('\n') + '\n';
 }
-async function save() {
-  if (!rec.length) return;
-  const d = new Date(), z = n => String(n).padStart(2, '0');
-  const stamp = d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate()) + '-' + z(d.getHours()) + z(d.getMinutes()) + z(d.getSeconds());
-  const label = ($('i-label').value.trim() || 'take').replace(/[^a-z0-9_-]+/gi, '-');
-  const name = 'gesture-lab_' + (gotSensor ? 'imu' : 'sim') + '_' + label + '_' + stamp + '.csv', text = csv();
-  const msg = $('rec-msg');
+const stamp = () => { const d = new Date(), z = n => String(n).padStart(2, '0'); return d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate()) + '-' + z(d.getHours()) + z(d.getMinutes()) + z(d.getSeconds()); };
+async function saveFile(name, text, msg) {
   if (window.claude && window.claude.use) {
     try {
       const dl = await window.claude.use('downloads');
@@ -576,11 +940,17 @@ async function save() {
     } catch (e) { msg.textContent = e && e.code === 'declined' ? 'Save cancelled.' : 'The file could not be saved here.'; }
     return;
   }
-  const url = URL.createObjectURL(new Blob([text], {type: 'text/csv'})), a = document.createElement('a');
+  const url = URL.createObjectURL(new Blob([text], {type: 'application/octet-stream'})), a = document.createElement('a');
   a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000); msg.textContent = 'Saved ' + name + '.';
 }
-$('b-save').addEventListener('click', save);
+$('b-save').addEventListener('click', () => {
+  if (!rec.length) return;
+  const label = ($('i-label').value.trim() || 'take').replace(/[^a-z0-9_-]+/gi, '-');
+  saveFile('gesture-lab_' + (gotSensor ? 'imu' : 'sim') + '_' + label + '_' + stamp() + '.csv', csv(), $('rec-msg'));
+});
+$('b-json').addEventListener('click', () => saveFile('gesture-clips_' + stamp() + '.json', datasetJson(), $('ds-msg')));
+$('b-dcsv').addEventListener('click', () => saveFile('gesture-clips_' + stamp() + '.csv', datasetCsv(), $('ds-msg')));
 
 function renderLog() {
   $('log').textContent = events.length ? events.map(e =>
@@ -604,18 +974,16 @@ function showWindow(ev) {
 /* ---------- tuning ---------- */
 const TUNE = [['start', 't-start', 'v-start', v => v + ' °/s', 1], ['sweep', 't-sweep', 'v-sweep', v => v + '°', 1], ['dom', 't-dom', 'v-dom', v => v + '%', 100], ['acc', 't-acc', 'v-acc', v => v + ' m/s²', 1], ['peak', 't-peak', 'v-peak', v => v + ' °/s', 1]];
 function syncTune() { TUNE.forEach(([k, i, o, fmt, mul]) => { const v = Math.round(P[k] * mul); $(i).value = v; $(o).textContent = fmt(v); }); }
-TUNE.forEach(([k, i, o, fmt, mul]) => $(i).addEventListener('input', () => {
-  P[k] = Number($(i).value) / mul; $(o).textContent = fmt($(i).value);
-  try { localStorage.setItem('gl-params', JSON.stringify(P)); } catch (e) {}
-}));
-$('b-reset').addEventListener('click', () => { Object.assign(P, DEFAULTS); syncTune(); try { localStorage.removeItem('gl-params'); } catch (e) {} });
+TUNE.forEach(([k, i, o, fmt, mul]) => $(i).addEventListener('input', () => { P[k] = Number($(i).value) / mul; $(o).textContent = fmt($(i).value); store.set('gl-params', P); }));
+$('b-reset').addEventListener('click', () => { Object.assign(P, DEFAULTS); syncTune(); store.set('gl-params', P); });
 
 /* ---------- tabs and main loop ---------- */
-let tab = 'play';
+let tab = 'prop';
+const TABS = ['prop', 'collect', 'play', 'signals', 'tune'];
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
   tab = b.dataset.tab;
   document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', String(x === b)));
-  ['play', 'signals', 'record', 'tune'].forEach(t => { $('p-' + t).hidden = t !== tab; });
+  TABS.forEach(t => { $('p-' + t).hidden = t !== tab; });
 }));
 let slow = 0;
 function frame(now) {
@@ -624,9 +992,9 @@ function frame(now) {
     else if (game.cur && now - game.cur.t0 > game.cur.ttl) resolve(game.cur.kind === 'hold', 'none', now);
     else if (!game.cur && now >= game.nextAt) spawn(now);
   }
-  if (tab === 'play') drawScene(now); else if (tab === 'signals') drawPlot(now);
+  if (tab === 'prop') drawView(now); else if (tab === 'play') drawScene(now); else if (tab === 'signals') drawPlot(now);
   if (now - slow > 300) {
-    slow = now; if (game.on) hud(); if (running) setStatus(); recUi();
+    slow = now; if (game.on) hud(); if (running) setStatus(); recUi(); modeLabel();
     if (lastS) {
       $('s-rate').textContent = Math.round(1000 / rateDt) + ' Hz';
       $('s-yaw').textContent = Math.round(lastS.yaw) + ' °/s'; $('s-tilt').textContent = Math.round(lastS.tilt) + ' °/s';
@@ -635,8 +1003,11 @@ function frame(now) {
   }
   requestAnimationFrame(frame);
 }
-syncTune(); setLegend(); requestAnimationFrame(frame);
-window.__gl = {det, ingest, game, events, get rec() { return rec; }, csv};
+try { initView(); } catch (e) { $('no3d').hidden = false; }
+setProp(prop); modeLabel(); setFlip();
+syncTune(); setLegend(); renderClasses(); renderDs(); renderCap(); requestAnimationFrame(frame);
+window.__gl = {det, ingest, game, events, ds, cap, view, csv, datasetJson, datasetCsv, train, predict, features,
+  get rec() { return rec; }, get model() { return model; }, get q() { return qShow(); }, get qFilt() { return qFilt; }};
 })();
 </script>
 </body>
