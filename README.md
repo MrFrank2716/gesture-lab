@@ -25,6 +25,23 @@ sensor (a laptop, or the copy inside Claude) a drag pad appears and fakes the mo
 
 Vibration works on Android only; iPhone browsers do not expose it. Sound works on both.
 
+## Watching on a laptop while you swing the phone
+
+You cannot watch a phone you are swinging, so the phone can send its motion to another screen:
+
+1. Open the page on the laptop and press "Link a phone". It shows a five character code and a QR code.
+2. Scan the QR code with the phone (or open the page, tap "This phone is the sensor" and type the code), then tap "Start sending".
+3. Point the top of the phone at the laptop screen and tap Recentre on the laptop.
+
+The laptop then runs everything from the phone's motion: the prop, Collect, the game and the plot.
+Clips recorded this way are marked `phone-link`. On Android the phone buzzes when a gesture is recognised.
+
+The link uses [PeerJS](https://peerjs.com) (WebRTC). The two browsers find each other through
+PeerJS's free public pairing server, then motion samples go directly between them. Only the code
+and connection details pass through that server. To avoid it, run your own PeerServer and set
+`window.GL_PEER = {host, port, path, secure}` before the page script. Both devices need internet
+access, and some guest or campus Wi-Fi networks block direct connections between devices.
+
 ## The 3D prop
 
 Hold the phone like the prop, top edge pointing away from you, and tap Recentre. Two tracking
